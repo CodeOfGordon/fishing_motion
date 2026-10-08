@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fishing-motion"
+version = "0.1.0"
+description = "A fishing game played with a motion-sensing rod (pygame-ce)."
+requires-python = ">=3.12"
+dependencies = ["pygame-ce>=2.5.8"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+# The rod side (rod/) is yours; these are the libraries it is expected to use.
+rod = ["pyserial", "numpy", "scikit-learn"]
+
+[tool.setuptools.packages.find]
+include = ["fishing*", "rod*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = ["rod: needs the real rod; set ROD_PORT=/dev/cu.usbmodemXXXX"]
+filterwarnings = ["ignore:no fast renderer available"]

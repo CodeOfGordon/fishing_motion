@@ -1,0 +1,392 @@
+# All gameplay tuning for Rod Fishing lives in this file.
+# Visual-only constants (colours, font sizes) live in fishing/render/palette.py.
+# Times are in seconds unless a key ends in _ms; distances are logical pixels
+# (the window is 1280x720 logical, scaled to the screen). Pairs are [min, max].
+
+[loop]
+step_hz = 60          # fixed simulation rate
+max_frame_s = 0.25    # longest frame the loop tries to catch up on
+max_steps = 5         # most sim steps per frame; any backlog beyond that is dropped
+fps_cap = 60
+
+[window]
+width = 1280
+height = 720
+
+[input]
+stale_ms = 150        # rod input older than this counts as disconnected
+history_ms = 1000     # how much reel/tilt history the round keeps for judging gestures
+
+[keyboard]
+cast_charge_s = 1.0            # holding Space this long gives a full-strength cast
+tilt_ramp_per_s = 6.0          # A/D (or arrows) slew tilt toward +-1 at this rate
+slow_reel = 0.35               # S held
+fast_reel = 1.0                # W held
+mouse_full_turns_per_s = 2.0   # circling the window centre this fast = reel 1.0
+mouse_window_ms = 100          # mouse-circle speed is measured over this window
+mouse_min_radius = 40          # cursor positions closer to the centre are ignored
+
+[menu]
+tilt_nav = 0.6            # with the rod, tilt past this moves the menu selection...
+tilt_nav_repeat_s = 0.45  # ...once per this long while held; a hook-set selects
+
+[rod_test]
+trials = 10               # prompts per part (casts, then hook-sets)
+pass_threshold = 8        # registered out of `trials` to pass
+gap_s = 1.0               # pause between cast prompts
+cast_window_s = 4.0       # a cast counts if it arrives this soon after the prompt
+bite_delay_s = [1.5, 4.0] # random wait before each BITE
+hook_window_s = 1.5       # a hook-set counts if it arrives this soon after the BITE
+
+[round]
+length_s = 180            # one timed round
+frenzy_s = 30             # the final stretch: faster spawns, bolder fish
+warn_s = 10               # clock ticks every second for the final stretch
+overtime_cap_s = 30       # a fight still running at 0:00 may continue this long
+catch_card_s = 1.8
+escape_card_s = 1.2
+hooked_s = 0.3            # "HOOKED!" pause before the fight
+hit_stop_s = 0.08         # frozen frame on a successful hook-set
+resume_countdown_s = 1.0  # after the rod reconnects
+
+[pond]
+rod_tip = [640, 660]
+water_left = 40
+water_right = 1240
+water_top = 90
+water_bottom = 620
+shallow = [100, 260]      # depth zones = distance bands from the rod tip
+mid = [260, 420]
+deep = [420, 600]
+dock_radius = 48          # the lure is home (empty retrieve) within this distance (covers the water edge at the dock)
+land_radius = 40          # a fought fish is landed inside this distance
+
+[cast]
+min_dist = 140
+dist_per_strength = 440   # distance = min_dist + dist_per_strength * strength
+aim_max_deg = 40          # tilt -1..1 aims the cast -40..40 degrees
+aim_lookback_ms = 150     # aim from tilt this long before the flick (the flick rotates the rod)
+flight_base_s = 0.5
+flight_per_strength_s = 0.5
+arm_delay_s = 0.5         # READY must last this long before a cast is accepted...
+arm_max_reel = 0.2        # ...and reeling must be below this
+scatter_radius = 40       # fish this close to the splash dart away
+scatter_cooldown_s = 5
+curious_radius = 150      # fish this close (but beyond scatter) get curious
+curious_s = 4
+curious_mult = 2.0
+
+[lure]
+retrieve_speed = 120      # px/s at reel_rate 1 while drifting (slow enough for fish to find it)
+steer_speed = 100         # px/s sideways at tilt 1
+steer_reel_floor = 0.3    # steering works at this fraction even without reeling
+slow_band = [0.1, 0.45]   # a slow retrieve in this band...
+slow_interest_mult = 1.5  # ...makes fish this much keener
+
+[fish_ai]
+notice_radius = 160
+notice_wariness_shrink = 0.3     # radius * (1 - shrink * wariness)
+cone_deg = 70                    # fish only notice a lure in front of them...
+cone_wariness_shrink_deg = 30    # ...and wary fish have a narrower cone
+scare_speed = 180                # a lure faster than this * (1 - shrink * wariness) spooks
+scare_wariness_shrink = 0.6
+commit_rate = 3.0                # chance per second * (1 - shrink * wariness)
+commit_wariness_shrink = 0.5
+approach_speed_mult = 0.6
+arrive_radius = 12
+flee_cooldown_s = 6
+global_flee_cooldown_s = 1
+flee_speed_mult = 2.5
+flee_s = 1.2
+wander_turn_rate = 1.6           # rad/s of random heading change
+wander_noise = 4.0               # how fast the wander turn rate itself drifts
+steer_turn_mult = 2.0            # max turn when steering back into its zone, x wander_turn_rate
+flee_turn_mult = 3.0             # max turn while fleeing, x the steering turn
+leave_margin = 40                # a leaving fish is gone this far past the side of the pond
+cruise_jitter = 0.35             # cruise speed varies down to (1 - jitter)
+edge_margin = 30
+fade_s = 1.0                     # fish fade in when they appear and out when they leave
+
+[hook]
+nibble_spook_grace_s = 0.5   # reeling is tolerated this long after nibbling starts
+nibble_spook_reel = 0.3      # reeling faster than this...
+nibble_spook_hold_s = 0.25   # ...for this long spooks a nibbling fish
+nibble_ignore_hook_reel = 0.4  # a hook_set while reeling this fast is ignored, not early
+grace_ms = 150               # added to every bite window for detection latency
+delivery_margin_ms = 120     # wait this long past the window for late-delivered gestures (judged by their stamp)
+perfect_ms = 250             # reaction at or under this is a perfect hook
+ack_match_ms = 500           # a bite_ack within this of a bite counts for that bite
+
+[fight]
+reel_speed = 90           # px/s at reel_rate 1 while fighting
+tension_reel = 0.45       # T_target = reel * (tension_reel + tension_pull * pull)
+tension_pull = 1.2
+tau_up_s = 0.20
+tau_down_s = 0.15
+pull_stamina_floor = 0.3  # pull = strength * (floor + (1 - floor) * stamina) * phase
+rest_pull = 0.3           # pull multiplier while the fish rests
+stamina_base = 0.3        # stamina drain = (base + tension_k * T) / stamina_s
+stamina_tension = 1.0
+run_s = [1.0, 2.0]
+rest_s = [0.8, 1.6]
+first_run_s = 2.0
+no_runs_below_stamina = 0.1
+lateral_rate = 0.6        # rad/s the fish swings sideways during a run (times pull)
+lateral_max_deg = 60
+side_pressure_min_tilt = 0.3
+side_pressure_pull_cut = 0.35
+side_pressure_drain_mult = 1.3
+strain_recover = 2.0      # strain drains this many times faster than it builds
+slack_tension = 0.08
+slack_s = 2.0
+line_out = 800
+
+[spawn]
+initial = 8
+max = 10
+per_species_max = 3
+respawn_s = [2.5, 4.5]
+lifetime_s = [35, 60]
+frenzy_respawn_mult = 0.5
+frenzy_wariness_drop = 0.2
+frenzy_nibble_drop = 1
+practice_progress = 0.5
+spawn_arc_deg = 80       # fish appear within this angle of straight ahead
+
+[special]
+species = "lantern_koi"
+chance = 0.75             # chance per round that it appears at all
+window = [0.60, 0.75]     # when, as a fraction of the round
+stay_s = 25               # leaves if not hooked by then
+
+[junk]
+species = "old_boot"
+count = 2
+snag_radius = 20
+
+[scoring]
+size_base = 0.8           # points = base_points * (size_base + size_span * size_frac)
+size_span = 0.4
+size_beta = [2.0, 3.0]    # size_frac ~ Beta(a, b): big ones are rarer
+bonus_mult = 2
+streak_step = 0.1         # x(1 + step * min(streak, cap))
+streak_cap = 5
+perfect_hook_bonus = 20
+bonus_rotate_s = 25
+
+[medals]  # from tools/simulate_rounds.py (200 rounds/profile); re-tune after real playtests
+bronze = 250     # a typical novice round
+silver = 450
+gold = 700       # a little above a typical skilled round
+platinum = 1050  # top 10% of skilled rounds
+
+[difficulty.easy]
+window_mult = 1.3
+wariness_add = -0.15
+strength_mult = 0.85
+snap_strain_s = 0.9
+
+[difficulty.normal]
+window_mult = 1.0
+wariness_add = 0.0
+strength_mult = 1.0
+snap_strain_s = 0.7
+
+[difficulty.hard]
+window_mult = 0.85
+wariness_add = 0.1
+strength_mult = 1.15
+snap_strain_s = 0.55
+
+# Species. kind: fish | special | trap | junk.
+# nibbles/gap_s: fake nibbles before the bite; pause_s: wait after the last nibble.
+# window_ms: how long the bite lasts (for the trap: how long it holds on).
+[[species]]
+id = "minnow"
+name = "Minnow"
+kind = "fish"
+size_cm = [5, 9]
+points = 10
+weight = [30, 22]
+zones = ["shallow"]
+cruise = 70
+wariness = 0.10
+strength = 0.10
+stamina_s = 2
+run_speed = 70
+nibbles = [0, 0]
+gap_s = [0.5, 0.9]
+pause_s = [0.2, 0.4]
+window_ms = 900
+touchy = false
+
+[[species]]
+id = "bluegill"
+name = "Bluegill"
+kind = "fish"
+size_cm = [12, 20]
+points = 30
+weight = [24, 18]
+zones = ["shallow", "mid"]
+cruise = 60
+wariness = 0.25
+strength = 0.25
+stamina_s = 4
+run_speed = 60
+nibbles = [1, 1]
+gap_s = [0.5, 0.9]
+pause_s = [0.5, 0.9]
+window_ms = 800
+touchy = false
+
+[[species]]
+id = "perch"
+name = "Perch"
+kind = "fish"
+size_cm = [18, 30]
+points = 50
+weight = [18, 16]
+zones = ["mid"]
+cruise = 75
+wariness = 0.40
+strength = 0.40
+stamina_s = 6
+run_speed = 75
+nibbles = [2, 2]
+gap_s = [0.4, 0.8]
+pause_s = [0.4, 0.8]
+window_ms = 700
+touchy = false
+
+[[species]]
+id = "rainbow_trout"
+name = "Rainbow Trout"
+kind = "fish"
+size_cm = [30, 50]
+points = 90
+weight = [9, 11]
+zones = ["mid", "deep"]
+cruise = 110
+wariness = 0.70
+strength = 0.55
+stamina_s = 8
+run_speed = 110
+nibbles = [3, 3]
+gap_s = [0.3, 0.6]
+pause_s = [0.3, 0.6]
+window_ms = 600
+touchy = true
+
+[[species]]
+id = "bass"
+name = "Largemouth Bass"
+kind = "fish"
+size_cm = [35, 60]
+points = 110
+weight = [7, 10]
+zones = ["mid"]
+cruise = 90
+wariness = 0.50
+strength = 0.65
+stamina_s = 10
+run_speed = 90
+nibbles = [1, 1]
+gap_s = [0.5, 0.9]
+pause_s = [1.5, 2.5]
+window_ms = 600
+touchy = false
+
+[[species]]
+id = "catfish"
+name = "Catfish"
+kind = "fish"
+size_cm = [40, 80]
+points = 130
+weight = [5, 8]
+zones = ["deep"]
+cruise = 45
+wariness = 0.30
+strength = 0.75
+stamina_s = 16
+run_speed = 70
+nibbles = [4, 4]
+gap_s = [0.8, 1.4]
+pause_s = [0.8, 1.4]
+window_ms = 1000
+touchy = false
+
+[[species]]
+id = "pike"
+name = "Pike"
+kind = "fish"
+size_cm = [60, 100]
+points = 200
+weight = [2, 5]
+zones = ["deep"]
+cruise = 140
+wariness = 0.60
+strength = 0.85
+stamina_s = 12
+run_speed = 140
+nibbles = [0, 1]
+gap_s = [0.2, 0.4]
+pause_s = [0.1, 0.3]
+window_ms = 550
+touchy = false
+
+[[species]]
+id = "lantern_koi"
+name = "Lantern Koi"
+kind = "special"
+size_cm = [55, 75]
+points = 100
+weight = [0, 0]
+zones = ["deep"]
+cruise = 100
+wariness = 0.80
+strength = 0.60
+stamina_s = 12
+run_speed = 100
+nibbles = [4, 4]
+gap_s = [0.4, 0.9]
+pause_s = [0.4, 0.9]
+window_ms = 600
+touchy = false
+
+[[species]]
+id = "bait_thief"
+name = "Bait Thief"
+kind = "trap"
+size_cm = [4, 7]
+points = -30
+weight = [10, 10]
+zones = ["shallow", "mid"]
+cruise = 120
+wariness = 0.0
+strength = 0.05
+stamina_s = 1
+run_speed = 60
+nibbles = [0, 0]
+gap_s = [0.2, 0.3]
+pause_s = [0.1, 0.2]
+window_ms = 2000
+touchy = false
+
+[[species]]
+id = "old_boot"
+name = "Old Boot"
+kind = "junk"
+size_cm = [25, 32]
+points = 5
+weight = [0, 0]
+zones = ["mid", "deep"]
+cruise = 0
+wariness = 0.0
+strength = 0.15
+stamina_s = 1
+run_speed = 0
+nibbles = [0, 0]
+gap_s = [0.1, 0.1]
+pause_s = [0.1, 0.1]
+window_ms = 1200
+touchy = false
