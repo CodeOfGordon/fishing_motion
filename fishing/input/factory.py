@@ -15,9 +15,14 @@ def make_keyboard(tuning: Tuning) -> KeyboardMouseSource:
     return KeyboardMouseSource(tuning.keyboard, centre=(w / 2, h / 2))
 
 
-def make_source(settings: Settings, tuning: Tuning) -> tuple[MotionSource, str, str | None]:
-    """Return (source, name, error). On any rod problem: keyboard plus the error text."""
-    if settings.input_source == ROD:
+def make_source(
+    settings: Settings, tuning: Tuning, name: str | None = None,
+) -> tuple[MotionSource, str, str | None]:
+    """Return (source, name, error). On any rod problem: keyboard plus the error text.
+
+    ``name`` overrides settings.input_source (e.g. --source, or a fallback) without saving it.
+    """
+    if (name or settings.input_source) == ROD:
         try:
             from rod.serial_source import SerialMotionSource  # lazy: pyserial may be absent
 

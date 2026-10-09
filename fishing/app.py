@@ -44,8 +44,7 @@ class App:
         self.data_dir = data_dir or DATA_DIR
         self.tuning = load_tuning()
         self.settings = load_settings(self.data_dir / "settings.json")
-        if args.source:
-            self.settings.input_source = args.source
+        self.source_override: str | None = args.source  # --source applies to this run only
         configure_nav(self.tuning.menu.tilt_nav, self.tuning.menu.tilt_nav_repeat_s)
 
         w, h = self.tuning.window.width, self.tuning.window.height
@@ -70,6 +69,7 @@ class App:
         self.source: MotionSource
         self.source_name = KEYBOARD
         self.source_error: str | None = None
+        self.source_key: tuple = ()
         self.log.note("session_start", now_ms(), detail={"settings": asdict(self.settings),
                                                          "seed": args.seed})
         self.switch_source()
@@ -94,14 +94,23 @@ class App:
             return PlainView(self.tuning, self.fonts)
         return ArtView(self.tuning, self.fonts)
 
-    def switch_source(self) -> None:
+    def requested_source(self) -> tuple:
+        """What the settings (or --source) currently ask for, to detect changes."""
+        name = self.source_override or self.settings.input_source
+        s = self.settings
+        return (name, s.serial_port, s.baud) if name == ROD else (name,)
+
+    def switch_source(self, name: str | None = None) -> None:
+        """(Re)open the input source. ``name`` forces one for this session without saving it."""
         old = getattr(self, "source", None)
         if old is not None:
             try:
                 old.close()
             except Exception as err:
                 self.log.note("source_error", now_ms(), reason=f"close: {err}")
-        self.source, self.source_name, self.source_error = make_source(self.settings, self.tuning)
+        want = name or self.source_override or self.settings.input_source
+        self.source, self.source_name, self.source_error = make_source(self.settings, self.tuning, want)
+        self.source_key = self.requested_source() if name is None else (want,)
         self.log.input = self.source_name
         self.connecting = self.source_name == ROD
         self.shaper.reset()
@@ -200,15 +209,15 @@ class App:
                 events = self.source.drain_events()
             except Exception as err:  # a broken source must not kill the game
                 self.log.note("source_error", now_ms(), reason=f"poll: {err}")
-                self.settings.input_source = KEYBOARD
-                self.switch_source()
+                self.switch_source(KEYBOARD)  # for this session only; settings are untouched
+                self.source_error = f"Rod source stopped: {err}"
                 raw, events = self.source.poll(), self.source.drain_events()
             host = now_ms()
             st = self.shaper.shape(raw, host)
             stale = self.shaper.is_stale(raw, host)
             if raw.connected:
                 self.connecting = False
-            self.rate.update(raw.seq, raw.t_ms)
+            self.rate.update(raw.seq, host)
             self.overlay.push(st.reel_rate, st.tilt)
             if events:
                 self.last_gesture = events[-1]

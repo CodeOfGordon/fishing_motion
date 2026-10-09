@@ -60,10 +60,13 @@ MEDAL_COLOURS = {"bronze": BRONZE, "silver": SILVER, "gold": GOLD, "platinum": P
 
 # font sizes
 OVERLAY_FONT_SIZE = 18
+OVERLAY_FONT_NAME = "menlo,monaco,couriernew"  # system monospace; falls back to the default font
 HUD_FONT_SIZE = 30
 HUD_SMALL_FONT_SIZE = 22
 CARD_TITLE_SIZE = 46
 TITLE_FONT_SIZE = 96
+TITLE_Y = 104  # the title sits inside the pond, clear of the bank
+ROD_TEST_FEEDBACK_MS = 900  # how long a Rod Test result line stays up
 MENU_FONT_SIZE = 36
 MENU_SPACING = 46
 

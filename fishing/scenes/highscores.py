@@ -18,6 +18,7 @@ class HighScoresScene(Scene):
         super().__init__(app)
         self.highlight = highlight
         self._next: Scene | None = None
+        app.log.end_round()
 
     def _back(self) -> None:
         from fishing.scenes.title import TitleScene
@@ -32,7 +33,7 @@ class HighScoresScene(Scene):
             self._back()
 
     def update(self, frame_s: float, st: MotionState, events: list[MotionEvent], stale: bool) -> Scene | None:
-        if self.app.source_name == "rod" and any(e.kind == HOOK_SET for e in events):
+        if self.app.source_name == "rod" and not stale and any(e.kind == HOOK_SET for e in events):
             self._back()
         return self._next
 

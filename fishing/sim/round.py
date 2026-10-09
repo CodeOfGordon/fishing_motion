@@ -86,6 +86,7 @@ class Stats:
     escapes: dict[str, int] = field(default_factory=lambda: {r: 0 for r in ESCAPE_REASONS})
     catches: list[Catch] = field(default_factory=list)
     best_streak: int = 0
+    released: int = 0  # trap fish that let go of the bait (no penalty)
     reactions_ms: list[float] = field(default_factory=list)
 
 
@@ -144,6 +145,9 @@ class Round:
         self.bite_id = 0
         self.bite_start_ms = -1e9
         self.bite_window_ms = 0.0
+        self.bite_sent_host_ms = -1e12  # host time the last BITE was sent (acks are matched to it)
+        self.acked_bite_id = 0
+        self.last_ack_ms: float | None = None
         self.nibble_times: list[float] = []
         self.nibble_start_ms = 0.0
         self.bite_at_ms = 0.0
@@ -253,6 +257,11 @@ class Round:
     ) -> list[GameEvent]:
         self.out = []
         if self.finished:
+            for e in events:
+                if e.kind == BITE_ACK:
+                    self._on_ack(e)
+                else:
+                    self._emit_ignored(e, "state:OVER", count=False)
             return self.out
         if stale or self.frozen:
             if not self._handle_freeze(stale, events, host_now_ms):
@@ -285,13 +294,13 @@ class Round:
                 self._emit(ev.DISCONNECT)
             self.resume_at_ms = None
             for e in events:
-                self._emit_ignored(e, "disconnected")
+                self._ack_or_ignore(e, "disconnected")
             return False
         if self.resume_at_ms is None:
             self.resume_at_ms = host_now_ms + self.t.round.resume_countdown_s * 1000.0
         if host_now_ms < self.resume_at_ms:
             for e in events:
-                self._emit_ignored(e, "resuming")
+                self._ack_or_ignore(e, "resuming")
             return False
         self.frozen = False
         self.resume_at_ms = None
@@ -299,25 +308,46 @@ class Round:
         self._emit(ev.RECONNECT)
         return True
 
-    def _emit_ignored(self, e: MotionEvent, reason: str) -> None:
+    def _ack_or_ignore(self, e: MotionEvent, reason: str) -> None:
+        if e.kind == BITE_ACK:
+            self._on_ack(e)
+        else:
+            self._emit_ignored(e, reason)
+
+    def _emit_ignored(self, e: MotionEvent, reason: str, count: bool = True) -> None:
+        detail = {"why": reason, "raw": e.kind, "gesture_t_ms": round(e.t_ms, 1)}
         if e.kind == CAST:
-            self.stats.casts_ignored += 1
-            self._emit(ev.CAST, accepted=False, reason=reason, strength=e.strength)
+            if count:
+                self.stats.casts_ignored += 1
+            self._emit(ev.CAST, accepted=False, reason=reason, strength=e.strength, detail=detail)
         elif e.kind == HOOK_SET:
-            self.stats.hooks["ignored"] += 1
-            self._emit(ev.HOOK_ATTEMPT, accepted=False, reason="ignored", strength=e.strength,
-                       detail={"why": reason, "raw": e.kind})
+            if count:
+                self.stats.hooks["ignored"] += 1
+            self._emit(ev.HOOK_ATTEMPT, accepted=False, reason="ignored", strength=e.strength, detail=detail)
+
+    def mark_bite_sent(self, bite_id: int, host_ms: float) -> None:
+        """The play scene calls this right after send("BITE"): acks are timed from here."""
+        if bite_id == self.bite_id:
+            self.bite_sent_host_ms = host_ms
+
+    def _on_ack(self, e: MotionEvent) -> None:
+        """An ACK from the Uno after it beeped, matched to the last bite on the host clock."""
+        latency = e.t_ms - self.bite_sent_host_ms
+        dup = self.bite_id > 0 and self.acked_bite_id == self.bite_id
+        ok = self.bite_id > 0 and not dup and 0 <= latency <= self.t.hook.ack_match_ms
+        if ok:
+            self.acked_bite_id = self.bite_id
+            self.stats.acks += 1
+            self.last_ack_ms = latency
+        self._emit(ev.BITE_ACK, accepted=ok, reason="duplicate" if dup else ("" if ok else "unmatched"),
+                   bite_id=self.bite_id or None, value=latency if self.bite_id else None)
 
     # ------------------------------------------------------------------ gestures
     def _on_motion_event(self, e: MotionEvent) -> None:
-        te = e.t_ms - self.offset_ms  # the gesture's time on the sim clock
         if e.kind == BITE_ACK:
-            latency = te - self.bite_start_ms
-            matched = 0 <= latency <= self.t.hook.ack_match_ms
-            if matched:
-                self.stats.acks += 1
-            self._emit(ev.BITE_ACK, accepted=matched, bite_id=self.bite_id, value=latency)
+            self._on_ack(e)
             return
+        te = e.t_ms - self.offset_ms  # the gesture's time on the sim clock
         s_at = self.state_at(te)
         if e.kind == CAST:
             if self.state == BITE and s_at == BITE and self.forgiving_hook:
@@ -341,7 +371,8 @@ class Round:
             self._start_cast(e, te)
             return
         self.stats.casts_ignored += 1
-        self._emit(ev.CAST, accepted=False, reason=reason, strength=e.strength)
+        self._emit(ev.CAST, accepted=False, reason=reason, strength=e.strength,
+                   detail={"gesture_t_ms": round(e.t_ms, 1)})
 
     def _start_cast(self, e: MotionEvent, te: float) -> None:
         c = self.t.cast
@@ -355,7 +386,8 @@ class Round:
                          flight_len=c.flight_base_s + c.flight_per_strength_s * strength)
         self.stats.casts += 1
         self._emit(ev.CAST, accepted=True, strength=strength, value=self._dist_to_tip(tx, ty),
-                   detail={"aim_deg": round(math.degrees(aim), 1), "x": round(tx), "y": round(ty)})
+                   detail={"aim_deg": round(math.degrees(aim), 1), "x": round(tx), "y": round(ty),
+                           "gesture_t_ms": round(e.t_ms, 1)})
         self._set_state(CASTING)
 
     def _clamp_ray(self, tip: tuple[float, float], aim: float, dist: float) -> tuple[float, float]:
@@ -401,27 +433,30 @@ class Round:
         else:
             result, why = "ignored", f"state:{s_at}"
 
+        bid = self.bite_id if (self.state in (BITE, HOOKED, FIGHT) or s_at in (BITE, HOOKED)) else None
+        if result == "late" and bid:
+            reaction = te - self.bite_start_ms
         self.stats.hooks[result] += 1
         self._emit(
-            ev.HOOK_ATTEMPT, accepted=result == "hooked", reason=result, bite_id=self.bite_id or None,
+            ev.HOOK_ATTEMPT, accepted=result == "hooked", reason=result, bite_id=bid,
             species=fish.spec.id if fish and result in ("hooked", "early", "late") else "",
-            strength=e.strength, value=reaction, detail={"raw": e.kind, "why": why},
+            strength=e.strength, value=reaction,
+            detail={"raw": e.kind, "why": why, "gesture_t_ms": round(e.t_ms, 1)},
         )
         if result == "hooked":
             self._hooked(reaction or 0.0)
         elif result == "early":
-            self._early()
+            self._early(bid)
         elif result == "late" and self.state == BITE:
             self._bite_over()
 
     # ------------------------------------------------------------------ transitions
-    def _early(self) -> None:
+    def _early(self, bite_id: int | None) -> None:
         fish = self.owner
         self.stats.escapes["early"] += 1
-        self._emit(ev.ESCAPE, reason="early", bite_id=self.bite_id or None,
-                   species=fish.spec.id if fish else "")
+        self._emit(ev.ESCAPE, reason="early", bite_id=bite_id, species=fish.spec.id if fish else "")
         self._break_streak()
-        self._release_owner(flee=True)
+        self._release_owner(flee=True, leave=True)
         self.card = Card("early", "Too early!", until_ms=self.sim_ms + self.t.round.escape_card_s * 1000)
         self._set_state(DRIFT)
 
@@ -435,7 +470,13 @@ class Round:
         self.hooked_until_ms = self.sim_ms + self.t.round.hooked_s * 1000.0
         self._set_state(HOOKED)
 
-    def _release_owner(self, flee: bool) -> None:
+    def _flee(self, fish: Fish, from_xy: tuple[float, float], until_s: float, leave: bool) -> None:
+        """A fish darts away; no fish may take the lure for a moment after any flee."""
+        fish.flee(from_xy, until_s, self.t.fish_ai, leave=leave)
+        self.global_flee_until_s = max(self.global_flee_until_s,
+                                       self.now_s + self.t.fish_ai.global_flee_cooldown_s)
+
+    def _release_owner(self, flee: bool, leave: bool = False) -> None:
         fish = self.owner
         self.lure.owner = None
         if fish is None:
@@ -444,10 +485,9 @@ class Round:
             fish.mode = WANDER
             fish.cooldown_until = self.now_s + self.t.fish_ai.flee_cooldown_s
         elif flee:
-            fish.flee((self.lure.x, self.lure.y), self.now_s + self.t.fish_ai.flee_cooldown_s, self.t.fish_ai)
+            self._flee(fish, (self.lure.x, self.lure.y), self.now_s + self.t.fish_ai.flee_cooldown_s, leave)
         else:
             fish.mode = WANDER
-        self.global_flee_until_s = self.now_s + self.t.fish_ai.global_flee_cooldown_s
 
     def _break_streak(self) -> None:
         self.streak = 0
@@ -456,6 +496,7 @@ class Round:
         self.bite_id += 1
         self.stats.bites += 1
         self.bite_start_ms = self.sim_ms
+        self.bite_sent_host_ms = self.sim_ms + self.offset_ms  # refined by mark_bite_sent()
         self.bite_window_ms = fish.spec.window_ms * self.diff.window_mult
         fish.mode = ATTACHED
         self._emit(ev.BITE, bite_id=self.bite_id, species=fish.spec.id, value=self.bite_window_ms,
@@ -515,9 +556,7 @@ class Round:
         self.stats.escapes[reason] += 1
         self._emit(ev.ESCAPE, reason=reason, bite_id=self.bite_id or None, species=species)
         self._break_streak()
-        self._release_owner(flee=True)
-        if fish is not None and not fish.is_static:
-            fish.leave()
+        self._release_owner(flee=True, leave=True)
         self.fight = None
         text = {"snap": "Line snapped!", "slack": "It shook the hook!", "line_out": "It ran out the line!",
                 "late": "Too late! Bait stolen", "overtime": "Time's up!"}.get(reason, "It got away")
@@ -629,7 +668,7 @@ class Round:
                 continue
             d = f.dist_to(lure.x, lure.y)
             if d < c.scatter_radius:
-                f.flee((lure.x, lure.y), self.now_s + c.scatter_cooldown_s, self.t.fish_ai)
+                self._flee(f, (lure.x, lure.y), self.now_s + c.scatter_cooldown_s, leave=False)
                 scattered += 1
             elif d < c.curious_radius:
                 f.curious_until = self.now_s + c.curious_s
@@ -645,8 +684,8 @@ class Round:
         d = math.hypot(dx, dy) or 1.0
         retrieve = self.reel * lc.retrieve_speed
         steer = self.tilt * lc.steer_speed * (lc.steer_reel_floor + (1 - lc.steer_reel_floor) * self.reel)
-        if self.state == BITE:
-            retrieve = steer = 0.0  # the fish has it; the lure stays put
+        if self.state in (NIBBLE, BITE):
+            retrieve = steer = 0.0  # a fish is on it: reel only spooks, tilt is ignored
         lure.vx = dx / d * retrieve + steer
         lure.vy = dy / d * retrieve
         p = self.t.pond
@@ -654,6 +693,10 @@ class Round:
         lure.y = max(p.water_top, min(p.water_bottom, lure.y + lure.vy * dt))
         if self._dist_to_tip(lure.x, lure.y) <= p.dock_radius:
             if self.state in (DRIFT, APPROACH):
+                fish = self.owner
+                if self.state == APPROACH and fish is not None:
+                    self._emit(ev.LOST_INTEREST, species=fish.spec.id, reason="dock")
+                    fish.cooldown_until = self.now_s + self.t.fish_ai.flee_cooldown_s
                 self._release_owner(flee=False)
                 self.stats.empty_retrieves += 1
                 self._emit(ev.EMPTY_RETRIEVE)
@@ -678,6 +721,8 @@ class Round:
                 self._start_bite(f)
                 return
         ai = self.t.fish_ai
+        if self._dist_to_tip(lure.x, lure.y) < ai.dock_shy_radius:
+            return  # fish won't take a lure right by the dock
         slow = self.t.lure.slow_band[0] <= self.reel <= self.t.lure.slow_band[1]
         candidates = sorted(
             (f for f in self.fishes if not f.is_static and f.mode == WANDER and f.alpha >= 1.0
@@ -688,14 +733,14 @@ class Round:
             w = self._effective_wariness(f.spec)
             d = f.dist_to(lure.x, lure.y)
             if d > ai.notice_radius * (1 - ai.notice_wariness_shrink * w):
-                break  # sorted by distance: nobody further can notice either
+                continue  # out of this fish's range (wariness shrinks it); a bolder one may still notice
             to_lure = math.atan2(lure.y - f.y, lure.x - f.x)
             cone = math.radians(ai.cone_deg - ai.cone_wariness_shrink_deg * w)
             if abs(angle_diff(to_lure, f.heading)) > cone:
                 continue
             if lure.speed > ai.scare_speed * (1 - ai.scare_wariness_shrink * w):
-                if f.spec.touchy or w >= 0.5:
-                    f.flee((lure.x, lure.y), self.now_s + ai.flee_cooldown_s, ai)
+                if f.spec.touchy or w >= ai.wary_flee:
+                    self._flee(f, (lure.x, lure.y), self.now_s + ai.flee_cooldown_s, leave=True)
                     self._emit(ev.SPOOK, species=f.spec.id, reason="fast_lure")
                 continue
             rate = ai.commit_rate * (1 - ai.commit_wariness_shrink * w)
@@ -720,7 +765,8 @@ class Round:
         w = self._effective_wariness(fish.spec)
         if lure.speed > ai.scare_speed * (1 - ai.scare_wariness_shrink * w):
             self._emit(ev.LOST_INTEREST, species=fish.spec.id)
-            self._release_owner(flee=fish.spec.touchy or w >= 0.5)
+            wary = fish.spec.touchy or w >= ai.wary_flee
+            self._release_owner(flee=wary, leave=wary)
             fish.cooldown_until = self.now_s + ai.flee_cooldown_s
             self._set_state(DRIFT)
             return
@@ -745,7 +791,7 @@ class Round:
             self.spook_hold_s += dt
             if self.spook_hold_s >= h.nibble_spook_hold_s:
                 self._emit(ev.SPOOK, species=fish.spec.id, reason="reeling")
-                self._release_owner(flee=True)
+                self._release_owner(flee=True, leave=True)
                 self._set_state(DRIFT)
                 return
         else:
@@ -776,6 +822,7 @@ class Round:
             self._set_state(DRIFT)
             return
         if fish.spec.kind == "trap":
+            self.stats.released += 1
             self._emit(ev.BITE_RELEASED, bite_id=self.bite_id, species=fish.spec.id)
             self._release_owner(flee=True)
             self._set_state(DRIFT)
@@ -800,8 +847,10 @@ class Round:
         outcome = step_fight(f, dt, self.reel, self.tilt, self.t.fight, self.rng,
                              self.t.pond.land_radius, self.diff.snap_strain_s)
         tip = self.t.pond.rod_tip
-        self.lure.x = tip[0] + math.sin(f.angle) * f.dist
-        self.lure.y = tip[1] - math.cos(f.angle) * f.dist
+        p = self.t.pond
+        # the fish holds at the bank while the line pays out (dist itself is not clamped)
+        self.lure.x = max(p.water_left, min(p.water_right, tip[0] + math.sin(f.angle) * f.dist))
+        self.lure.y = max(p.water_top, min(p.water_bottom, tip[1] - math.cos(f.angle) * f.dist))
         self._stick_owner()
         if f.new_run:
             self._emit(ev.FIGHT_RUN, species=f.spec.id, detail={"dir": f.run_dir})
@@ -815,8 +864,9 @@ class Round:
     # ------------------------------------------------------------------ debug & results
     def force_bite(self) -> bool:
         """Practice key B: the nearest fish bites now (tests the buzzer and hook-set)."""
-        if self.state not in (DRIFT, APPROACH, NIBBLE) or not self.lure.in_water:
-            self._emit(ev.DEBUG, accepted=False, reason=f"force_bite:{self.state}")
+        if self.frozen or self.state not in (DRIFT, APPROACH, NIBBLE) or not self.lure.in_water:
+            why = "frozen" if self.frozen else self.state
+            self._emit(ev.DEBUG, accepted=False, reason=f"force_bite:{why}")
             return False
         fish = self.owner
         if fish is None:
@@ -853,6 +903,7 @@ class Round:
             "casts_ignored": s.casts_ignored,
             "bites": s.bites,
             "acks": s.acks,
+            "released": s.released,
             "hooks": dict(s.hooks),
             "escapes": dict(s.escapes),
         }

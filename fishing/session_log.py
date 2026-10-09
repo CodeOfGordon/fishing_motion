@@ -18,16 +18,18 @@ COLUMNS = [
     "wall_iso", "t_ms", "round_id", "mode", "input", "state", "event", "accepted", "reason",
     "bite_id", "species", "strength", "value", "detail",
 ]
-SKIP_KINDS = frozenset()  # every event kind is logged
 
 
-def _fmt(value: Any) -> str:
+FLOAT_DIGITS = {"strength": 3}  # gesture strengths keep detail; times and values use 1 decimal
+
+
+def _fmt(value: Any, digits: int = 1) -> str:
     if value is None:
         return ""
     if isinstance(value, bool):
         return "1" if value else "0"
     if isinstance(value, float):
-        return f"{value:.1f}"
+        return f"{value:.{digits}f}"
     return str(value)
 
 
@@ -48,9 +50,22 @@ class SessionLog:
         self._csv = csv.writer(self._file)
         self._csv.writerow(COLUMNS)
         self._file.flush()
-        self.round_id = 0
-        self.mode = ""
+        self._rounds = 0
+        self.round_id = 0  # 0 = not in a round (menus)
+        self.mode = "menu"
         self.input = ""
+
+    def begin_round(self, mode: str) -> int:
+        """Rows written from now on belong to a new round (play, practice or rodtest)."""
+        self._rounds += 1
+        self.round_id = self._rounds
+        self.mode = mode
+        return self.round_id
+
+    def end_round(self) -> None:
+        """Back in the menus: rows are no longer tagged with a round."""
+        self.round_id = 0
+        self.mode = "menu"
 
     def write_row(self, **fields: Any) -> None:
         detail = fields.get("detail")
@@ -59,12 +74,10 @@ class SessionLog:
         fields.setdefault("round_id", self.round_id or "")
         fields.setdefault("mode", self.mode)
         fields.setdefault("input", self.input)
-        self._csv.writerow([_fmt(fields.get(c)) for c in COLUMNS])
+        self._csv.writerow([_fmt(fields.get(c), FLOAT_DIGITS.get(c, 1)) for c in COLUMNS])
         self._file.flush()
 
     def event(self, e: GameEvent) -> None:
-        if e.kind in SKIP_KINDS:
-            return
         self.write_row(
             t_ms=e.t_ms, state=e.state, event=e.kind, accepted=e.accepted, reason=e.reason,
             bite_id=e.bite_id, species=e.species, strength=e.strength, value=e.value,

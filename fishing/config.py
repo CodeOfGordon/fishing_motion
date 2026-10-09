@@ -23,6 +23,7 @@ class LoopConfig:
     max_frame_s: float
     max_steps: int
     fps_cap: int
+    demo_max_dt_s: float
 
 
 @dataclass(frozen=True)
@@ -46,6 +47,7 @@ class KeyboardConfig:
     mouse_full_turns_per_s: float
     mouse_window_ms: float
     mouse_min_radius: float
+    max_ramp_dt_s: float
 
 
 @dataclass(frozen=True)
@@ -75,6 +77,7 @@ class RoundConfig:
     hooked_s: float
     hit_stop_s: float
     resume_countdown_s: float
+    results_delay_s: float
 
 
 @dataclass(frozen=True)
@@ -144,6 +147,9 @@ class FishAIConfig:
     cruise_jitter: float
     edge_margin: float
     fade_s: float
+    wary_flee: float
+    edge_turn_mult: float
+    dock_shy_radius: float
 
 
 @dataclass(frozen=True)

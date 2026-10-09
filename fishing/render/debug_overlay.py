@@ -12,23 +12,26 @@ GRAPH_SIZE = (360, 80)
 
 
 class RateMeter:
-    """Counts new samples (by ``seq``) over the last second."""
+    """Input samples per second, counted from ``seq`` (so it can read above the frame rate)."""
 
     def __init__(self, window_ms: float = 1000.0) -> None:
         self.window_ms = window_ms
-        self._times: deque[float] = deque()
+        self._samples: deque[tuple[float, int]] = deque()  # (host ms, new samples)
         self._last_seq: int | None = None
 
-    def update(self, seq: int, t_ms: float) -> None:
-        if seq != self._last_seq:
-            self._last_seq = seq
-            self._times.append(t_ms)
-        while self._times and t_ms - self._times[0] > self.window_ms:
-            self._times.popleft()
+    def update(self, seq: int, now_ms: float) -> None:
+        if self._last_seq is not None:
+            if seq > self._last_seq:
+                self._samples.append((now_ms, seq - self._last_seq))
+            elif seq < self._last_seq:  # a new source started counting again
+                self._samples.clear()
+        self._last_seq = seq
+        while self._samples and now_ms - self._samples[0][0] > self.window_ms:
+            self._samples.popleft()
 
     @property
     def hz(self) -> float:
-        return len(self._times) * 1000.0 / self.window_ms
+        return sum(n for _, n in self._samples) * 1000.0 / self.window_ms
 
 
 class DebugOverlay:
@@ -49,7 +52,7 @@ class DebugOverlay:
         if not self.visible:
             return
         if self._font is None:
-            self._font = pygame.font.Font(None, palette.OVERLAY_FONT_SIZE)
+            self._font = pygame.font.SysFont(palette.OVERLAY_FONT_NAME, palette.OVERLAY_FONT_SIZE)
         rendered = [self._font.render(line, True, palette.TEXT) for line in lines]
         gw, gh = GRAPH_SIZE
         width = max([r.get_width() for r in rendered] + [gw]) + 16

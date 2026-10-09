@@ -39,6 +39,7 @@ class Fish:
     alpha: float = 0.0  # fade in/out, 0..1
     turn_rate: float = 0.0
     flee_from: tuple[float, float] = (0.0, 0.0)
+    leave_after_flee: bool = False
     gone: bool = False
 
     @property
@@ -48,10 +49,13 @@ class Fish:
     def dist_to(self, x: float, y: float) -> float:
         return math.hypot(self.x - x, self.y - y)
 
-    def flee(self, from_xy: tuple[float, float], until_s: float, cfg: FishAIConfig) -> None:
+    def flee(self, from_xy: tuple[float, float], until_s: float, cfg: FishAIConfig,
+             leave: bool = False) -> None:
+        """Dart away from a point; with ``leave`` the fish then swims out of the pond."""
         if self.is_static:
             return
         self.mode = FLEE
+        self.leave_after_flee = leave
         self.mode_left = cfg.flee_s
         self.flee_from = from_xy
         self.cooldown_until = max(self.cooldown_until, until_s)
@@ -89,7 +93,7 @@ def update_fish(
         f.speed = f.spec.cruise * cfg.flee_speed_mult
         f.mode_left -= dt
         if f.mode_left <= 0:
-            f.mode = WANDER
+            f.mode = LEAVING if f.leave_after_flee else WANDER
     elif f.mode in (WANDER, LEAVING):
         f.turn_rate += rng.uniform(-1.0, 1.0) * cfg.wander_turn_rate * cfg.wander_noise * dt
         f.turn_rate = max(-cfg.wander_turn_rate, min(cfg.wander_turn_rate, f.turn_rate))
@@ -108,7 +112,8 @@ def update_fish(
         if not (pond.water_left + m < f.x < pond.water_right - m
                 and pond.water_top + m < f.y < pond.water_bottom - m) and f.mode != LEAVING:
             centre = ((pond.water_left + pond.water_right) / 2, (pond.water_top + pond.water_bottom) / 2)
-            f.heading = _steer(f.heading, math.atan2(centre[1] - f.y, centre[0] - f.x), 2 * max_turn)
+            f.heading = _steer(f.heading, math.atan2(centre[1] - f.y, centre[0] - f.x),
+                                cfg.edge_turn_mult * max_turn)
 
     f.x += math.cos(f.heading) * f.speed * dt
     f.y += math.sin(f.heading) * f.speed * dt

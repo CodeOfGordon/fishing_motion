@@ -24,10 +24,6 @@ CAST_KEY = pygame.K_SPACE
 FAST_REEL_KEY = pygame.K_w
 SLOW_REEL_KEY = pygame.K_s
 
-# Longest poll gap used for the tilt ramp, so a hitch can't snap tilt to full.
-_MAX_RAMP_DT_S = 0.1
-
-
 def _pygame_is_down(key: int) -> bool:
     return bool(pygame.key.get_pressed()[key])
 
@@ -87,7 +83,7 @@ class KeyboardMouseSource:
     # -- MotionSource ------------------------------------------------------
     def poll(self) -> MotionState:
         t = self.clock()
-        dt_s = min(max(t - self._last_poll, 0.0) / 1000.0, _MAX_RAMP_DT_S)
+        dt_s = min(max(t - self._last_poll, 0.0) / 1000.0, self.cfg.max_ramp_dt_s)
         self._last_poll = t
         self._seq += 1
         return MotionState(t, self._reel_rate(t), self._step_tilt(dt_s), True, self._seq)

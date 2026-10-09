@@ -44,3 +44,13 @@ def deliver(steps: int, inbox: list[E], step_fn: Callable[[list[E]], None]) -> l
     for i in range(steps):
         step_fn(inbox if i == 0 else [])
     return []
+
+
+def step_hosts(host_now_ms: float, frame_s: float, steps: int) -> list[float]:
+    """Host time for each of a frame's sim steps, spread over the time the frame covered.
+
+    The first step then maps to the frame's start, so a gesture stamped during a long
+    frame is judged against the state the round was really in at that moment.
+    """
+    frame_ms = max(frame_s, 0.0) * 1000.0
+    return [host_now_ms - frame_ms + i * frame_ms / steps for i in range(steps)]

@@ -8,6 +8,7 @@ step_hz = 60          # fixed simulation rate
 max_frame_s = 0.25    # longest frame the loop tries to catch up on
 max_steps = 5         # most sim steps per frame; any backlog beyond that is dropped
 fps_cap = 60
+demo_max_dt_s = 0.05  # the title screen's background pond steps at most this much per frame
 
 [window]
 width = 1280
@@ -25,6 +26,7 @@ fast_reel = 1.0                # W held
 mouse_full_turns_per_s = 2.0   # circling the window centre this fast = reel 1.0
 mouse_window_ms = 100          # mouse-circle speed is measured over this window
 mouse_min_radius = 40          # cursor positions closer to the centre are ignored
+max_ramp_dt_s = 0.1            # longest poll gap the tilt ramp uses, so a hitch can't snap tilt to full
 
 [menu]
 tilt_nav = 0.6            # with the rod, tilt past this moves the menu selection...
@@ -48,6 +50,7 @@ escape_card_s = 1.2
 hooked_s = 0.3            # "HOOKED!" pause before the fight
 hit_stop_s = 0.08         # frozen frame on a successful hook-set
 resume_countdown_s = 1.0  # after the rod reconnects
+results_delay_s = 1.6     # "Time's up!" stays up this long before the results
 
 [pond]
 rod_tip = [640, 660]
@@ -106,6 +109,9 @@ leave_margin = 40                # a leaving fish is gone this far past the side
 cruise_jitter = 0.35             # cruise speed varies down to (1 - jitter)
 edge_margin = 30
 fade_s = 1.0                     # fish fade in when they appear and out when they leave
+wary_flee = 0.5                  # fish at least this wary flee from a fast lure (others just ignore it)
+edge_turn_mult = 2.0             # extra turn when steering away from the pond edge, x the steering turn
+dock_shy_radius = 90             # fish won't take a lure this close to the rod tip
 
 [hook]
 nibble_spook_grace_s = 0.5   # reeling is tolerated this long after nibbling starts

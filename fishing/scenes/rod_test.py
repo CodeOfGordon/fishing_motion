@@ -24,27 +24,32 @@ class RodTestScene(Scene):
     def __init__(self, app: "App") -> None:
         super().__init__(app)
         self.cfg = app.tuning.rod_test
+        self.margin_ms = app.tuning.hook.delivery_margin_ms
+        self.ack_ms = app.tuning.hook.ack_match_ms
         self.rng = random.Random()
         self.phase = INTRO
         self.trial = 0
         self.cast_hits: list[float | None] = []  # strength, or None if missed
         self.hook_hits: list[float | None] = []  # reaction ms, or None if missed
-        self.acks: list[float | None] = []
+        self.acks: dict[int, float | None] = {}  # bite trial -> ack latency ms (None = no ack)
         self.prompt_at = 0.0
         self.window_end = 0.0
-        self.ack_pending = False
+        self.bite_sent = False
+        self.sent_ms = 0.0
+        self.ack_open: tuple[int, float] | None = None  # (trial, send time) awaiting an ACK
+        self.stale = False
         self.feedback = ""
         self.feedback_until = 0.0
         self._next: Scene | None = None
-        app.log.round_id += 1
-        app.log.mode = "rodtest"
+        app.log.begin_round("rodtest")
         app.music(None)  # silence, so you hear only the Uno's buzzer
 
     # ---------------------------------------------------------------- flow
     def _start(self) -> None:
         self.phase = CASTS
         self.trial = 0
-        self.cast_hits, self.hook_hits, self.acks = [], [], []
+        self.cast_hits, self.hook_hits, self.acks = [], [], {}
+        self.ack_open = None
         self.feedback = ""
         self._next_cast_prompt(now_ms())
         self.app.log.note("rodtest_start", now_ms())
@@ -56,12 +61,11 @@ class RodTestScene(Scene):
     def _next_hook_prompt(self, t: float) -> None:
         self.prompt_at = t + self.rng.uniform(*self.cfg.bite_delay_s) * 1000
         self.window_end = self.prompt_at + self.cfg.hook_window_s * 1000
-        self.ack_pending = False
         self.bite_sent = False
 
     def _feedback(self, msg: str, t: float) -> None:
         self.feedback = msg
-        self.feedback_until = t + 900
+        self.feedback_until = t + palette.ROD_TEST_FEEDBACK_MS
 
     def on_event(self, e: pygame.event.Event) -> None:
         if e.type != pygame.KEYDOWN:
@@ -78,60 +82,127 @@ class RodTestScene(Scene):
     def update(self, frame_s: float, st: MotionState, events: list[MotionEvent], stale: bool) -> Scene | None:
         t = now_ms()
         log = self.app.log
+        for e in events:  # acks are matched to their bite whatever else is going on
+            if e.kind == BITE_ACK:
+                self._on_ack(e)
+        gestures = [e for e in events if e.kind != BITE_ACK]
         if self.phase == INTRO:
-            if self.app.source_name == "rod" and any(e.kind == HOOK_SET for e in events):
+            if self.app.source_name == "rod" and not stale and any(e.kind == HOOK_SET for e in gestures):
                 self._start()
             return self._next
+        if self.phase == DONE:
+            self._close_ack(t)
+            return self._next
+
+        if self._handle_stale(stale, frame_s, t, gestures):
+            return self._next
         if self.phase == CASTS:
-            live = t >= self.prompt_at
-            for e in events:
-                if e.kind != CAST:
-                    continue
-                in_window = live and self.prompt_at <= e.t_ms <= self.window_end
-                log.note("rodtest_cast", e.t_ms, accepted=in_window, strength=e.strength, value=self.trial + 1)
-                if in_window and len(self.cast_hits) == self.trial:
-                    self.cast_hits.append(e.strength)
-                    self._feedback(f"Cast {self.trial + 1}: registered ({e.strength:.2f})", t)
-                    self._advance_cast(t)
-            if live and t > self.window_end and len(self.cast_hits) == self.trial:
-                self.cast_hits.append(None)
-                log.note("rodtest_cast_missed", t, accepted=False, value=self.trial + 1)
-                self._feedback(f"Cast {self.trial + 1}: nothing registered", t)
-                self._advance_cast(t)
-        elif self.phase == HOOKS:
-            if not self.bite_sent and t >= self.prompt_at:
-                self.bite_sent = True
-                try:
-                    self.app.source.send("BITE")
-                    result = "ok"
-                except Exception as err:
-                    result = f"error: {err}"
-                self.ack_pending = True
-                log.note("rodtest_bite", t, value=self.trial + 1, detail={"send": result})
-            for e in events:
-                if e.kind == BITE_ACK and self.ack_pending:
-                    latency = e.t_ms - self.prompt_at
-                    ok = 0 <= latency <= self.app.tuning.hook.ack_match_ms
-                    if ok:
-                        self.acks.append(latency)
-                        self.ack_pending = False
-                    log.note("rodtest_ack", e.t_ms, accepted=ok, value=latency)
-                elif e.kind == HOOK_SET:
-                    in_window = self.bite_sent and self.prompt_at <= e.t_ms <= self.window_end
-                    reaction = e.t_ms - self.prompt_at
-                    log.note("rodtest_hook", e.t_ms, accepted=in_window, strength=e.strength,
-                             value=reaction if self.bite_sent else None,
-                             reason="" if in_window else ("before_bite" if not self.bite_sent or reaction < 0 else "late"))
-                    if in_window and len(self.hook_hits) == self.trial:
-                        self.hook_hits.append(reaction)
-                        self._feedback(f"Hook {self.trial + 1}: {reaction:.0f} ms", t)
-                        self._advance_hook(t)
-            if self.bite_sent and t > self.window_end and len(self.hook_hits) == self.trial:
-                self.hook_hits.append(None)
-                log.note("rodtest_hook_missed", t, accepted=False, value=self.trial + 1)
-                self._feedback(f"Hook {self.trial + 1}: nothing registered", t)
-                self._advance_hook(t)
+            self._update_casts(t, gestures)
+        else:
+            self._update_hooks(t, gestures)
+        self._close_ack(t)
         return self._next
+
+    def _handle_stale(self, stale: bool, frame_s: float, t: float, gestures: list[MotionEvent]) -> bool:
+        """While the rod is unplugged the test pauses; returns True if it is paused."""
+        log = self.app.log
+        if stale != self.stale:
+            self.stale = stale
+            log.note("rodtest_disconnect" if stale else "rodtest_reconnect", t, value=self.trial + 1)
+            if stale and self.phase == HOOKS and self.bite_sent:
+                log.note("rodtest_void", t, value=self.trial + 1, reason="disconnected after BITE")
+                self.ack_open = None
+                self._next_hook_prompt(t)  # repeat this trial after reconnecting
+        if not stale:
+            return False
+        shift = frame_s * 1000.0
+        self.prompt_at += shift
+        self.window_end += shift
+        for e in gestures:
+            log.note("rodtest_gesture", e.t_ms, accepted=False, reason="disconnected",
+                     strength=e.strength, value=self.trial + 1, detail={"raw": e.kind})
+        return True
+
+    def _update_casts(self, t: float, gestures: list[MotionEvent]) -> None:
+        log = self.app.log
+        for e in gestures:
+            if e.kind != CAST:
+                log.note("rodtest_gesture", e.t_ms, accepted=False, reason=f"wrong_kind:{self.phase}",
+                         strength=e.strength, value=self.trial + 1, detail={"raw": e.kind})
+                continue
+            in_window = self.prompt_at <= e.t_ms <= self.window_end
+            reason = "" if in_window else ("before_prompt" if e.t_ms < self.prompt_at else "late")
+            log.note("rodtest_cast", e.t_ms, accepted=in_window, reason=reason, strength=e.strength,
+                     value=self.trial + 1)
+            if in_window and len(self.cast_hits) == self.trial:
+                self.cast_hits.append(e.strength)
+                self._feedback(f"Cast {self.trial + 1}: registered ({e.strength:.2f})", t)
+                self._advance_cast(t)
+        # judged on the gesture's stamp: wait the delivery margin before calling it missed
+        if t > self.window_end + self.margin_ms and len(self.cast_hits) == self.trial:
+            self.cast_hits.append(None)
+            log.note("rodtest_cast_missed", t, accepted=False, value=self.trial + 1)
+            self._feedback(f"Cast {self.trial + 1}: nothing registered", t)
+            self._advance_cast(t)
+
+    def _update_hooks(self, t: float, gestures: list[MotionEvent]) -> None:
+        log = self.app.log
+        if not self.bite_sent and t >= self.prompt_at:
+            try:
+                self.app.source.send("BITE")
+                result = "ok"
+            except Exception as err:  # never crash the test on a buzzer problem
+                result = f"error: {err}"
+            self.bite_sent = True
+            self.sent_ms = now_ms()
+            self.window_end = self.sent_ms + self.cfg.hook_window_s * 1000
+            self.ack_open = (self.trial, self.sent_ms)
+            self.acks[self.trial] = None
+            log.note("rodtest_bite", self.sent_ms, value=self.trial + 1, detail={"send": result})
+        for e in gestures:
+            if e.kind != HOOK_SET:
+                log.note("rodtest_gesture", e.t_ms, accepted=False, reason=f"wrong_kind:{self.phase}",
+                         strength=e.strength, value=self.trial + 1, detail={"raw": e.kind})
+                continue
+            reaction = e.t_ms - self.sent_ms if self.bite_sent else None
+            in_window = self.bite_sent and self.sent_ms <= e.t_ms <= self.window_end
+            if in_window:
+                reason = ""
+            elif not self.bite_sent or (reaction is not None and reaction < 0):
+                reason = "before_bite"
+            else:
+                reason = "late"
+            log.note("rodtest_hook", e.t_ms, accepted=in_window, reason=reason, strength=e.strength,
+                     value=reaction, detail={"trial": self.trial + 1})
+            if in_window and len(self.hook_hits) == self.trial:
+                self.hook_hits.append(reaction)
+                self._feedback(f"Hook {self.trial + 1}: {reaction:.0f} ms", t)
+                self._advance_hook(t)
+        if self.bite_sent and t > self.window_end + self.margin_ms and len(self.hook_hits) == self.trial:
+            self.hook_hits.append(None)
+            log.note("rodtest_hook_missed", t, accepted=False, value=self.trial + 1)
+            self._feedback(f"Hook {self.trial + 1}: nothing registered", t)
+            self._advance_hook(t)
+
+    def _on_ack(self, e: MotionEvent) -> None:
+        log = self.app.log
+        if self.ack_open is None:
+            log.note("rodtest_ack", e.t_ms, accepted=False, reason="unmatched")
+            return
+        trial, sent = self.ack_open
+        latency = e.t_ms - sent
+        ok = 0 <= latency <= self.ack_ms
+        if ok:
+            self.acks[trial] = latency
+            self.ack_open = None
+        log.note("rodtest_ack", e.t_ms, accepted=ok, reason="" if ok else "unmatched", value=latency,
+                 detail={"trial": trial + 1})
+
+    def _close_ack(self, t: float) -> None:
+        """Give up on an ACK once its window (plus the delivery margin) has passed."""
+        if self.ack_open is not None and t > self.ack_open[1] + self.ack_ms + self.margin_ms:
+            self.app.log.note("rodtest_ack_missed", t, accepted=False, value=self.ack_open[0] + 1)
+            self.ack_open = None
 
     def _advance_cast(self, t: float) -> None:
         self.trial += 1
@@ -143,9 +214,6 @@ class RodTestScene(Scene):
             self._next_cast_prompt(t)
 
     def _advance_hook(self, t: float) -> None:
-        if self.ack_pending:
-            self.acks.append(None)
-            self.ack_pending = False
         self.trial += 1
         if self.trial >= self.cfg.trials:
             self.phase = DONE
@@ -159,7 +227,7 @@ class RodTestScene(Scene):
         return {
             "casts": sum(h is not None for h in self.cast_hits), "cast_trials": len(self.cast_hits),
             "hooks": len(reactions), "hook_trials": len(self.hook_hits),
-            "acks": sum(a is not None for a in self.acks), "bites": len(self.hook_hits),
+            "acks": sum(a is not None for a in self.acks.values()), "bites": len(self.acks),
             "median_reaction_ms": round(statistics.median(reactions)) if reactions else None,
         }
 
@@ -185,7 +253,10 @@ class RodTestScene(Scene):
             for i, line in enumerate(lines):
                 hud.text(screen, mid, line, (w // 2, 180 + i * 50), palette.TEXT, "midtop")
             return
-        if self.phase in (CASTS, HOOKS):
+        if self.phase in (CASTS, HOOKS) and self.stale:
+            msg = "Connecting..." if app.connecting else "Rod disconnected: test paused"
+            hud.text(screen, big, msg, (w // 2, h // 2 - 40), palette.WARN, "center")
+        elif self.phase in (CASTS, HOOKS):
             label = "Casts" if self.phase == CASTS else "Hook-sets"
             hud.text(screen, mid, f"{label}: {self.trial + 1} / {n}", (w // 2, 90), palette.TEXT_DIM, "midtop")
             if t < self.prompt_at:

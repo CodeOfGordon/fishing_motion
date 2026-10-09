@@ -31,11 +31,22 @@ class HighScores:
         self.entries: list[Entry] = self._load()
 
     def _load(self) -> list[Entry]:
+        """Read the file, keeping only well-formed entries (a hand-edited file can't crash the game)."""
         try:
             raw = json.loads(self.path.read_text())
-            entries = [Entry(**{k: e[k] for k in Entry.__dataclass_fields__}) for e in raw]
-        except (OSError, ValueError, TypeError, KeyError):
+        except (OSError, ValueError):
             return []
+        if not isinstance(raw, list):
+            return []
+        entries = []
+        for item in raw:
+            try:
+                e = Entry(**{k: item[k] for k in Entry.__dataclass_fields__})
+            except (TypeError, KeyError):
+                continue
+            if isinstance(e.score, int) and not isinstance(e.score, bool):
+                entries.append(Entry(str(e.name), e.score, str(e.medal), str(e.best_fish), str(e.date),
+                                     str(e.input), str(e.difficulty)))
         entries.sort(key=lambda e: e.score, reverse=True)
         return entries[:MAX_ENTRIES]
 

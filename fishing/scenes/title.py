@@ -35,6 +35,7 @@ class TitleScene(Scene):
             on_move=lambda: app.audio.play("menu_move"), on_select=lambda: app.audio.play("menu_ok"),
         )
         app.overlay.visible = app.settings.show_fps
+        app.log.end_round()
         app.music("menu")
 
     def _play(self) -> None:
@@ -70,10 +71,10 @@ class TitleScene(Scene):
             self._quit()
 
     def update(self, frame_s: float, st: MotionState, events: list[MotionEvent], stale: bool) -> Scene | None:
-        self.menu.handle_motion(frame_s, st, events, self.app.source_name == "rod")
+        self.menu.handle_motion(frame_s, st, events, self.app.source_name == "rod" and not stale)
         host = now_ms()
         self.idle = MotionState(host, 0.0, 0.0)
-        self.demo.step(min(frame_s, 0.05), self.idle, [], host)
+        self.demo.step(min(frame_s, self.app.tuning.loop.demo_max_dt_s), self.idle, [], host)
         self.view.update(frame_s, self.idle)
         return self._next
 
@@ -82,12 +83,14 @@ class TitleScene(Scene):
         w, h = screen.get_size()
         info = ViewInfo(app.source_name, None, True, False, False, False, now_ms(), attract=True)
         self.view.draw(screen, self.demo, self.idle, info)
-        hud.text(screen, app.fonts.get(palette.TITLE_FONT_SIZE), "Rod Fishing", (w // 2, 70), palette.TEXT, "midtop")
+        hud.text(screen, app.fonts.get(palette.TITLE_FONT_SIZE), "Rod Fishing", (w // 2, palette.TITLE_Y),
+                 palette.TEXT, "midtop")
         src = "rod" if app.source_name == "rod" else "keyboard & mouse"
-        hud.text(screen, app.fonts.get(palette.HUD_SMALL_FONT_SIZE), f"input: {src}", (w // 2, 150),
-                 palette.TEXT_DIM, "midtop")
+        small = app.fonts.get(palette.HUD_SMALL_FONT_SIZE)
+        info_y = palette.TITLE_Y + palette.TITLE_FONT_SIZE * 3 // 4 + 8
+        hud.text(screen, small, f"input: {src}", (w // 2, info_y), palette.TEXT, "midtop")
         if app.source_error:
-            hud.text(screen, app.fonts.get(palette.HUD_SMALL_FONT_SIZE), app.source_error, (w // 2, 176),
-                     palette.WARN, "midtop")
-        hud.panel(screen, pygame.Rect(w // 2 - 200, 220, 400, 300))
-        self.menu.draw(screen, app.fonts, w // 2, 236)
+            hud.text(screen, small, app.source_error, (w // 2, info_y + 26), palette.WARN, "midtop")
+        menu_top = info_y + 64
+        hud.panel(screen, pygame.Rect(w // 2 - 200, menu_top, 400, 300))
+        self.menu.draw(screen, app.fonts, w // 2, menu_top + 16)

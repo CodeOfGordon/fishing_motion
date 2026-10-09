@@ -70,7 +70,7 @@ class ResultsScene(Scene):
             self._title()
 
     def update(self, frame_s: float, st: MotionState, events: list[MotionEvent], stale: bool) -> Scene | None:
-        self.menu.handle_motion(frame_s, st, events, self.app.source_name == "rod")
+        self.menu.handle_motion(frame_s, st, events, self.app.source_name == "rod" and not stale)
         return self._next
 
     def draw(self, screen: pygame.Surface) -> None:
@@ -109,7 +109,7 @@ class ResultsScene(Scene):
         esc = s["escapes"]
         lines = [
             f"Cast gestures: {s['casts']} accepted, {s['casts_ignored']} ignored",
-            f"Bites: {s['bites']}    BITE acks: {s['acks']}",
+            f"Bites: {s['bites']} ({s['released']} bait thief let go)    BITE acks: {s['acks']}",
             f"Hook-sets: {hooks['hooked']} hooked, {hooks['early']} early, {hooks['late']} late",
             f"           {hooks['no_bite']} with no bite, {hooks['ignored']} ignored",
             f"Escapes: {esc['snap']} snapped, {esc['slack']} slack, {esc['line_out']} line out",

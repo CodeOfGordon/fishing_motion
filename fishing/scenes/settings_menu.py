@@ -22,6 +22,7 @@ class SettingsScene(Scene):
     def __init__(self, app: "App") -> None:
         super().__init__(app)
         self._next: Scene | None = None
+        app.log.end_round()
         app.music("menu")
         self.status = ""
         s = app.settings
@@ -30,6 +31,8 @@ class SettingsScene(Scene):
         def setter(name):
             def set_(v):
                 setattr(s, name, v)
+                if name == "input_source":
+                    app.source_override = None  # choosing here replaces --source
                 if name in ("master_volume", "music_volume"):
                     app.apply_volumes()
             return set_
@@ -94,7 +97,7 @@ class SettingsScene(Scene):
         from fishing.scenes.title import TitleScene
 
         self.app.save_settings()
-        if (self.app.settings.input_source != self.app.source_name) and not self.app.source_error:
+        if self.app.requested_source() != self.app.source_key:  # input, port or baud changed
             self.app.switch_source()
         self._next = TitleScene(self.app)
 
@@ -105,7 +108,7 @@ class SettingsScene(Scene):
             self._back()
 
     def update(self, frame_s: float, st: MotionState, events: list[MotionEvent], stale: bool) -> Scene | None:
-        self.menu.handle_motion(frame_s, st, events, self.app.source_name == "rod")
+        # No rod navigation here: you tilt and jerk the rod to test it on this screen.
         self.live = st
         return self._next
 

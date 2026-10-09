@@ -184,6 +184,15 @@ class Menu:
 
     def handle_event(self, e: pygame.event.Event) -> bool:
         """Returns True if the menu used the event."""
+        editing = next((r for r in self.rows if r.editing), None)
+        if editing is not None:
+            if e.type in (pygame.KEYDOWN, pygame.TEXTINPUT):
+                editing.on_text(e)
+                return True
+            if e.type == pygame.MOUSEMOTION:
+                return False
+            if e.type == pygame.MOUSEBUTTONDOWN:
+                editing.activate()  # a click commits the edit, then acts as usual
         row = self.rows[self.index]
         if row.on_text(e):
             return True

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import pygame
 
 from fishing.input.motion import MotionEvent, MotionState, now_ms
-from fishing.loop import FixedStep, deliver
+from fishing.loop import FixedStep, deliver, step_hosts
 from fishing.audio.bank import FIGHT_MUSIC_DUCK
 from fishing.render.hud import ViewInfo
 from fishing.scenes.base import Scene
@@ -18,8 +18,6 @@ from fishing.ui.widgets import ActionRow, Menu
 
 if TYPE_CHECKING:
     from fishing.app import App
-
-RESULTS_DELAY_S = 1.6  # "Time's up!" stays up this long before the results
 
 SOUNDS = {
     ev.LURE_LAND: "plop",
@@ -54,8 +52,9 @@ class PlayScene(Scene):
             on_move=lambda: app.audio.play("menu_move"), on_select=lambda: app.audio.play("menu_ok"),
         )
         self._next: Scene | None = None
-        app.log.round_id += 1
-        app.log.mode = "practice" if practice else "play"
+        self._ended = False
+        self.mode = "practice" if practice else "play"
+        self.round_id = app.log.begin_round(self.mode)
         if practice:
             app.overlay.visible = True
         app.shaper.reset()
@@ -76,7 +75,10 @@ class PlayScene(Scene):
             self.paused = True
             self.app.audio.play("menu_back")
         elif self.practice and e.key == pygame.K_b:
-            self._debug(self.round.force_bite)
+            if self.stale or self.app.connecting:  # never buzz a disconnected rod
+                self.app.log.note("debug", now_ms(), accepted=False, reason="force_bite:disconnected")
+            else:
+                self._debug(self.round.force_bite)
         elif self.practice and e.key == pygame.K_k:
             self._debug(self.round.force_special)
 
@@ -88,14 +90,31 @@ class PlayScene(Scene):
 
     def _resume(self) -> None:
         self.paused = False
+        self.app._flush_input()  # the click or key that chose Resume is not a gesture
 
     def _restart(self) -> None:
+        self._end_unfinished("restart")  # before the new round takes the next round_id
         self._next = PlayScene(self.app, self.practice)
 
     def _quit(self) -> None:
         from fishing.scenes.title import TitleScene
 
+        self._end_unfinished("quit")
         self._next = TitleScene(self.app)
+
+    def _end_unfinished(self, reason: str) -> None:
+        """Practice and abandoned rounds still get a round_end row with their summary."""
+        r = self.round
+        if self._ended or not r.started or r.finished:
+            return
+        self._ended = True
+        app = self.app
+        for e in self.inbox:  # gestures still waiting for a step are logged, not lost
+            app.log.note("gesture_unprocessed", e.t_ms, round_id=self.round_id, mode=self.mode, accepted=False,
+                         reason=reason, strength=e.strength, detail={"raw": e.kind})
+        self.inbox = []
+        app.log.note(ev.ROUND_END, now_ms(), round_id=self.round_id, mode=self.mode, state=r.state, reason=reason,
+                     value=r.score, detail=r.summary())
 
     # ---------------------------------------------------------------- frame
     def update(self, frame_s: float, st: MotionState, events: list[MotionEvent], stale: bool) -> Scene | None:
@@ -103,7 +122,7 @@ class PlayScene(Scene):
         self.stale = stale
         app = self.app
         if self.paused:
-            self.pause_menu.handle_motion(frame_s, st, events, app.source_name == "rod")
+            self.pause_menu.handle_motion(frame_s, st, events, app.source_name == "rod" and not stale)
             for e in events:
                 app.log.note("gesture_paused", e.t_ms, accepted=False, reason="paused",
                              strength=e.strength, detail={"raw": e.kind})
@@ -113,7 +132,9 @@ class PlayScene(Scene):
         host_now = now_ms()
         self.inbox += events
         steps = self.stepper.advance(frame_s)
-        self.inbox = deliver(steps, self.inbox, lambda evs: self._step(evs, st, host_now, stale))
+        if steps:
+            hosts = iter(step_hosts(host_now, frame_s, steps))  # gestures keep their true timing
+            self.inbox = deliver(steps, self.inbox, lambda evs: self._step(evs, st, next(hosts), stale))
 
         r = self.round
         reeling_states = R.LURE_STATES + (R.FIGHT,)
@@ -124,7 +145,7 @@ class PlayScene(Scene):
 
         if r.finished:
             self.over_for += frame_s
-            if self.over_for >= RESULTS_DELAY_S and self._next is None:
+            if self.over_for >= app.tuning.round.results_delay_s and self._next is None:
                 from fishing.scenes.results import ResultsScene
 
                 self._next = ResultsScene(app, r)
@@ -142,6 +163,7 @@ class PlayScene(Scene):
                 result = "ok"
             except Exception as err:  # the buzzer must never crash the game
                 result = f"error: {err}"
+            self.round.mark_bite_sent(e.bite_id or 0, now_ms())
             e = replace(e, detail={**e.detail, "send": result})
             if app.settings.game_bite_sound:
                 app.audio.play("bite")
@@ -185,11 +207,15 @@ class PlayScene(Scene):
             f = r.fight
             lines.append(f"T {f.tension:4.2f}  strain {f.strain:4.2f}  stamina {f.stamina:4.2f}  "
                          f"dist {f.dist:5.0f}  {'RUN' if f.running else 'rest'}")
-        lines.append(f"casts {r.stats.casts} (+{r.stats.casts_ignored} ignored)  bites {r.stats.bites}  "
-                     f"acks {r.stats.acks}  hooked {r.stats.hooks['hooked']}  early {r.stats.hooks['early']}  "
-                     f"late {r.stats.escapes['late']}")
+        ack = f"{r.last_ack_ms:.0f} ms" if r.last_ack_ms is not None else "-"
+        lines.append(f"casts {r.stats.casts} (+{r.stats.casts_ignored} ignored)  bites {r.stats.bites} "
+                     f"({r.stats.released} let go)  acks {r.stats.acks} (last {ack})")
+        lines.append(f"hooked {r.stats.hooks['hooked']}  early {r.stats.hooks['early']}  "
+                     f"late {r.stats.hooks['late'] + r.stats.escapes['late']}  "
+                     f"no_bite {r.stats.hooks['no_bite']}  ignored {r.stats.hooks['ignored']}")
         return lines
 
     def on_exit(self) -> None:
+        self._end_unfinished("exit")
         self.app.audio.reel_clicks(0.0, 0.0, False)
         self.app.audio.tension(None)
