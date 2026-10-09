@@ -72,6 +72,19 @@ ROD_PORT=/dev/cu.usbmodemXXXX pytest -m rod
 Then choose **Settings > Input > Rod**, set the port (or use **Scan**), and pick **Connect**. If the
 rod can't start, the game says why and stays on keyboard.
 
+## Firmware (`firmware/`)
+The Arduino Nano's code is a [PlatformIO](https://platformio.org) project. Open the `firmware/`
+folder in VS Code with the PlatformIO extension. The firmware itself is `firmware/src/main.cpp`.
+
+| Button (VS Code bottom bar) | Does | Command line |
+|---|---|---|
+| ✓ Build | compile the firmware | `pio run` |
+| → Upload | compile and flash the Nano over USB | `pio run -t upload` |
+| 🔌 Serial Monitor | show what the Nano prints, and send it text (115200 baud) | `pio device monitor` |
+
+Only one program can use the USB port at a time. Close the Serial Monitor before uploading or
+before starting the game with the rod.
+
 ## Logs
 Each launch writes `logs/session_YYYY-MM-DD_HHMMSS.csv`, one row per event, flushed as it goes.
 
