@@ -42,7 +42,7 @@ class RodTestScene(Scene):
         self.feedback_until = 0.0
         self._next: Scene | None = None
         app.log.begin_round("rodtest")
-        app.music(None)  # silence, so you hear only the Uno's buzzer
+        app.music(None)  # silence, so you hear only the Nano's buzzer
 
     # ---------------------------------------------------------------- flow
     def _start(self) -> None:
@@ -245,7 +245,7 @@ class RodTestScene(Scene):
         if self.phase == INTRO:
             lines = [
                 f"Part 1: {n} casts. Flick forward when it says CAST.",
-                f"Part 2: {n} bites. The Uno beeps; jerk up to set the hook.",
+                f"Part 2: {n} bites. The Nano beeps; jerk up to set the hook.",
                 "The game's own bite sound is off here, so you only hear the buzzer.",
                 f"Input: {app.source_name}" + ("" if app.source_name == "rod" else "  (keyboard: Space = cast, J = hook)"),
                 "Press Enter (or hook-set with the rod) to start.  Esc to leave.",

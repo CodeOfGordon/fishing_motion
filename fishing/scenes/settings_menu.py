@@ -14,7 +14,8 @@ from fishing.ui.widgets import ActionRow, ChoiceRow, Menu, SliderRow, TextRow, T
 if TYPE_CHECKING:
     from fishing.app import App
 
-PORT_GLOB = "/dev/cu.usbmodem*"
+# Arduino Nanos show up as usbserial (FTDI or CH340 chips); Uno-style boards as usbmodem.
+PORT_GLOBS = ("/dev/cu.usbserial*", "/dev/cu.wchusbserial*", "/dev/cu.usbmodem*")
 ROWS_VISIBLE = 11
 
 
@@ -45,7 +46,7 @@ class SettingsScene(Scene):
                 ChoiceRow("Input", [("Keyboard & mouse", "keyboard"), ("Rod (serial)", "rod")],
                           getter("input_source"), setter("input_source")),
                 TextRow("Serial port", getter("serial_port"), setter("serial_port"),
-                        placeholder="/dev/cu.usbmodem..."),
+                        placeholder="/dev/cu.usbserial-..."),
                 ActionRow("Scan for ports", self._scan),
                 ChoiceRow("Baud", [(str(b), b) for b in (9600, 57600, 115200, 230400, 250000)],
                           getter("baud"), setter("baud")),
@@ -72,9 +73,9 @@ class SettingsScene(Scene):
         )
 
     def _scan(self) -> None:
-        ports = sorted(glob.glob(PORT_GLOB))
+        ports = sorted({p for pattern in PORT_GLOBS for p in glob.glob(pattern)})
         if not ports:
-            self.status = f"No {PORT_GLOB} found. Is the Uno plugged in?"
+            self.status = "No Arduino port found (/dev/cu.usbserial*, ...). Is the Nano plugged in?"
             return
         current = self.app.settings.serial_port
         nxt = ports[(ports.index(current) + 1) % len(ports)] if current in ports else ports[0]

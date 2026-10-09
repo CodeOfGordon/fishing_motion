@@ -29,7 +29,7 @@ def nibble(s: Synth) -> Signal:
 
 
 def bite(s: Synth) -> Signal:
-    # Low and round, deliberately unlike the Uno's 2-4 kHz piezo beep.
+    # Low and round, deliberately unlike the Nano's 2-4 kHz piezo beep.
     return s.mix(s.tone(220, 0.25, 0.6, freq_end=120, release=0.12),
                  s.noise(0.18, 0.2, lowpass=0.15, release=0.12))
 
@@ -80,7 +80,7 @@ def gong(s: Synth) -> Signal:
 
 
 def buzzer(s: Synth) -> Signal:
-    """What the Uno's piezo sounds like, for keyboard play."""
+    """What the Nano's piezo sounds like, for keyboard play."""
     return s.tone(2700, 0.12, 0.25, wave="square", attack=0.001, release=0.005)
 
 

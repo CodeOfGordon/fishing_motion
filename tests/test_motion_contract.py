@@ -1,6 +1,6 @@
 """Every MotionSource must meet the boundary contract in fishing/input/motion.py.
 
-Run against your rod too:  ROD_PORT=/dev/cu.usbmodemXXXX pytest -m rod
+Run against your rod too:  ROD_PORT=/dev/cu.usbserial-XXXX pytest -m rod
 """
 import os
 import time

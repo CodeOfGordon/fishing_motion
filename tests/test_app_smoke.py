@@ -96,3 +96,11 @@ def test_rod_choice_with_stub_falls_back_to_keyboard(app):
     assert app.source_name == "keyboard"
     assert "Rod source not available" in app.source_error
     assert any(r["event"] == "source_error" for r in rows(app))
+
+
+def test_scan_finds_an_arduino_nano(app, monkeypatch):
+    found = {"/dev/cu.usbserial*": ["/dev/cu.usbserial-1410"], "/dev/cu.wchusbserial*": [], "/dev/cu.usbmodem*": []}
+    monkeypatch.setattr("fishing.scenes.settings_menu.glob.glob", lambda pattern: found.get(pattern, []))
+    scene = SettingsScene(app)
+    scene._scan()
+    assert app.settings.serial_port == "/dev/cu.usbserial-1410"

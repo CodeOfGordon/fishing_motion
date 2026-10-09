@@ -1,7 +1,7 @@
 # Rod Fishing
 
 A Wii Play-style fishing game played with a real rod: an MPU-6050 on a ruler, read by an
-Arduino Uno and streamed over USB serial. It's fully playable with keyboard and mouse too.
+Arduino Nano and streamed over USB serial. It's fully playable with keyboard and mouse too.
 
 Cast, steer the lure, wait out the nibbles, strike on the real bite, then win a short reel fight
 before the 3-minute clock runs out.
@@ -54,7 +54,7 @@ With the rod in menus: tilt to move the selection, hook-set to choose.
 2. **Reel slowly.** A slow retrieve attracts fish; a fast one spooks the wary ones. Fish only notice a
    lure in front of them.
 3. **Nibbles are fake.** The bobber twitches and the game stays quiet. Striking now is **too early**.
-4. **The real bite** pulls the bobber under with a splash, the game sends `BITE` (the Uno beeps), and
+4. **The real bite** pulls the bobber under with a splash, the game sends `BITE` (the Nano beeps), and
    you have about half a second to a second to jerk.
 5. **The fight:** reel when the fish rests, ease off when it runs, and lean the rod (tilt) against
    its run. Too tight and the line snaps; too slack and it shakes the hook.
@@ -67,7 +67,7 @@ The game talks to any `MotionSource` (`fishing/input/motion.py`). The rod's sour
 `rod/serial_source.py`. It's a stub for you to implement; its docstring lists the contract. Check
 your implementation with:
 ```sh
-ROD_PORT=/dev/cu.usbmodemXXXX pytest -m rod
+ROD_PORT=/dev/cu.usbserial-XXXX pytest -m rod
 ```
 Then choose **Settings > Input > Rod**, set the port (or use **Scan**), and pick **Connect**. If the
 rod can't start, the game says why and stays on keyboard.

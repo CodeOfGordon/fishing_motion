@@ -39,7 +39,7 @@ class MotionState:
 
 @dataclass(frozen=True)
 class MotionEvent:
-    """A one-shot gesture (or an acknowledgement from the Uno)."""
+    """A one-shot gesture (or an acknowledgement from the Nano)."""
 
     kind: str  # CAST | HOOK_SET | BITE_ACK
     t_ms: float  # now_ms() of the gesture's peak sample

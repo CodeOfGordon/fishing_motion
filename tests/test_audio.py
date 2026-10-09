@@ -43,7 +43,7 @@ def test_bank_plays_and_clicks(mixer):
 
 
 def test_bite_sound_is_not_in_the_buzzer_band(mixer):
-    """The game's bite must sound different from the Uno's piezo (2-4 kHz)."""
+    """The game's bite must sound different from the Nano's piezo (2-4 kHz)."""
     s = Synth(44100, 1)
     sig = recipes.bite(s)
     crossings = sum(1 for a, b in zip(sig, sig[1:]) if a <= 0 < b)

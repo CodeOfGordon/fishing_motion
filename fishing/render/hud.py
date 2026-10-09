@@ -153,7 +153,7 @@ def draw_status(surface: pygame.Surface, fonts: Fonts, rnd: R.Round, info: ViewI
     if info.connecting or info.stale or rnd.frozen:
         panel(surface, pygame.Rect(w // 2 - 300, h // 2 - 70, 600, 140))
         if info.connecting:
-            msg, sub = "Connecting...", "The Uno resets when the port opens (about 2 s)"
+            msg, sub = "Connecting...", "The Nano resets when the port opens (about 2 s)"
         elif info.stale:
             msg, sub = "Rod disconnected", "Check the USB cable. The round is paused."
         else:

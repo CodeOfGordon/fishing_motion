@@ -17,7 +17,7 @@ from tests.sim_driver import bot_round
 # ---------------------------------------------------------------- settings
 def test_settings_round_trip(tmp_path):
     path = tmp_path / "settings.json"
-    s = Settings(serial_port="/dev/cu.usbmodem1101", tilt_deadzone=0.2, tilt_invert=True)
+    s = Settings(serial_port="/dev/cu.usbserial-1410", tilt_deadzone=0.2, tilt_invert=True)
     save_settings(s, path)
     assert load_settings(path) == s
 

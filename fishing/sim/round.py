@@ -331,7 +331,7 @@ class Round:
             self.bite_sent_host_ms = host_ms
 
     def _on_ack(self, e: MotionEvent) -> None:
-        """An ACK from the Uno after it beeped, matched to the last bite on the host clock."""
+        """An ACK from the Nano after it beeped, matched to the last bite on the host clock."""
         latency = e.t_ms - self.bite_sent_host_ms
         dup = self.bite_id > 0 and self.acked_bite_id == self.bite_id
         ok = self.bite_id > 0 and not dup and 0 <= latency <= self.t.hook.ack_match_ms

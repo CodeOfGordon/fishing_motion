@@ -23,19 +23,20 @@ Contract the game relies on (see fishing/input/motion.py):
 * ``close()`` releases the serial port, so the source can be switched in
   Settings and reopened later.
 
-Practical notes for macOS and the Uno:
+Practical notes for macOS and the Arduino Nano:
 
-* Open ``/dev/cu.usbmodem*``, not ``/dev/tty.*``.
-* The Uno resets when the port opens, so expect about 2 s with no data.
+* Open the ``/dev/cu.*`` port, not ``/dev/tty.*``. A Nano shows up as
+  ``/dev/cu.usbserial-*`` (or ``/dev/cu.wchusbserial*`` on CH340 clones).
+* The Nano resets when the port opens, so expect about 2 s with no data.
 * The game assumes 115200 baud by default (Settings can change it).
 * Reeling must show no visible lag: keep your reel-rate estimate's latency
   under about 40 ms. A long analysis window adds visible lag.
-* ``poll()`` runs on the game thread 60 times a second, so heavy work (for
-  example running a model on every sample) belongs elsewhere.
+* ``poll()`` runs on the game thread once per frame (60-120 times a second),
+  so heavy work (for example running a model on every sample) belongs elsewhere.
 
 Test your implementation against the contract with:
 
-    ROD_PORT=/dev/cu.usbmodemXXXX pytest -m rod
+    ROD_PORT=/dev/cu.usbserial-XXXX pytest -m rod
 """
 from __future__ import annotations
 
