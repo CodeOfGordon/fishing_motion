@@ -25,6 +25,7 @@ from fishing.ui.widgets import Fonts, configure_nav
 MIXER_ARGS = (44100, -16, 2, 512)  # rate, int16, stereo, ~11.6 ms buffer
 MUSIC_DIR = Path(__file__).resolve().parent.parent / "assets" / "music"
 MUSIC_EXTS = (".ogg", ".mp3")
+HEADLESS_DRIVERS = ("dummy", "offscreen")
 
 
 def parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -50,7 +51,8 @@ class App:
         w, h = self.tuning.window.width, self.tuning.window.height
         flags = pygame.SCALED | (0 if args.windowed else pygame.FULLSCREEN)
         self.vsync = False
-        if self.tuning.loop.vsync:
+        headless = pygame.display.get_driver() in HEADLESS_DRIVERS  # vsync wouldn't pace frames there
+        if self.tuning.loop.vsync and not headless:
             try:
                 self.screen = pygame.display.set_mode((w, h), flags, vsync=1)
                 self.vsync = True
