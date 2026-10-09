@@ -182,10 +182,10 @@ perfect_hook_bonus = 20
 bonus_rotate_s = 25
 
 [medals]  # from tools/simulate_rounds.py (200 rounds/profile); re-tune after real playtests
-bronze = 250     # a typical novice round
-silver = 450
-gold = 700       # a little above a typical skilled round
-platinum = 1050  # top 10% of skilled rounds
+bronze = 180     # a typical novice round
+silver = 430
+gold = 600       # a typical skilled round
+platinum = 960   # top 10% of skilled rounds
 
 [difficulty.easy]
 window_mult = 1.3

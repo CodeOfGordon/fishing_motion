@@ -28,7 +28,7 @@ def pct(values: list[float], q: float) -> float:
 def run(profile_name: str, n: int, difficulty: str) -> dict:
     tuning = load_tuning()
     profile = PROFILES[profile_name]
-    scores, catches, casts, variety, special_share, trap = [], [], [], [], [], 0
+    scores, catches, casts, variety, seen, special_share, trap = [], [], [], [], [], [], 0
     escapes: Counter = Counter()
     species: Counter = Counter()
     for seed in range(n):
@@ -37,6 +37,7 @@ def run(profile_name: str, n: int, difficulty: str) -> dict:
         catches.append(len(r.stats.catches))
         casts.append(r.stats.casts)
         variety.append(len({c.species for c in r.stats.catches if c.kind in ("fish", "special")}))
+        seen.append(len(r.seen_species))
         special = sum(c.points for c in r.stats.catches if c.kind == "special")
         if r.score > 0 and special:
             special_share.append(special / r.score)
@@ -50,7 +51,8 @@ def run(profile_name: str, n: int, difficulty: str) -> dict:
         "score_p10_p50_p90": (pct(scores, 0.1), pct(scores, 0.5), pct(scores, 0.9)),
         "catches_mean": round(statistics.mean(catches), 1),
         "casts_mean": round(statistics.mean(casts), 1),
-        "species_per_round": round(statistics.mean(variety), 2),
+        "species_caught_per_round": round(statistics.mean(variety), 2),
+        "species_seen_per_round": round(statistics.mean(seen), 2),
         "special_share_max": round(max(special_share), 2) if special_share else 0.0,
         "special_share_mean": round(statistics.mean(special_share), 2) if special_share else 0.0,
         "trap_catches_per_round": round(trap / n, 2),
