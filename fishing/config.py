@@ -23,6 +23,7 @@ class LoopConfig:
     max_frame_s: float
     max_steps: int
     fps_cap: int
+    vsync: bool
     demo_max_dt_s: float
 
 

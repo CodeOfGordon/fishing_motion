@@ -7,7 +7,8 @@
 step_hz = 60          # fixed simulation rate
 max_frame_s = 0.25    # longest frame the loop tries to catch up on
 max_steps = 5         # most sim steps per frame; any backlog beyond that is dropped
-fps_cap = 60
+fps_cap = 60          # used only when vsync is off or unavailable (precise busy-wait cap)
+vsync = true          # sync drawing to the display (smooth, no busy-waiting); the sim stays at step_hz
 demo_max_dt_s = 0.05  # the title screen's background pond steps at most this much per frame
 
 [window]

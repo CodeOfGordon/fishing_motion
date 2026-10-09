@@ -49,7 +49,15 @@ class App:
 
         w, h = self.tuning.window.width, self.tuning.window.height
         flags = pygame.SCALED | (0 if args.windowed else pygame.FULLSCREEN)
-        self.screen = pygame.display.set_mode((w, h), flags)
+        self.vsync = False
+        if self.tuning.loop.vsync:
+            try:
+                self.screen = pygame.display.set_mode((w, h), flags, vsync=1)
+                self.vsync = True
+            except pygame.error:
+                pass  # no vsync here: fall back to a precise frame cap
+        if not self.vsync:
+            self.screen = pygame.display.set_mode((w, h), flags)
         pygame.display.set_caption("Rod Fishing")
 
         self.fonts = Fonts()
@@ -231,8 +239,11 @@ class App:
 
             self.scene.draw(self.screen)
             self.overlay.draw(self.screen, self.overlay_lines(raw, st, stale))
-            pygame.display.flip()
-            self.clock.tick(self.tuning.loop.fps_cap)
+            pygame.display.flip()  # with vsync this waits for the display
+            if self.vsync:
+                self.clock.tick()
+            else:
+                self.clock.tick_busy_loop(self.tuning.loop.fps_cap)  # tick() oversleeps on macOS
 
     def shutdown(self) -> None:
         self.scene.on_exit()
