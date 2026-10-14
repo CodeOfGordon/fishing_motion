@@ -103,7 +103,8 @@ class CastConfig:
     min_dist: float
     dist_per_strength: float
     aim_max_deg: float
-    aim_lookback_ms: float
+    aim_rate_per_s: float
+    aim_deadzone: float
     flight_base_s: float
     flight_per_strength_s: float
     arm_delay_s: float
@@ -163,6 +164,8 @@ class HookConfig:
     delivery_margin_ms: float
     perfect_ms: float
     ack_match_ms: float
+    window_mult: float
+    rod_window_mult: float
 
 
 @dataclass(frozen=True)

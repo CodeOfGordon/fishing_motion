@@ -19,6 +19,8 @@ from fishing.ui.widgets import ActionRow, Menu
 if TYPE_CHECKING:
     from fishing.app import App
 
+ROUND_END_MESSAGE = "END"  # serial contract: sent once when a round ends (see ROD_HOOKUP.md)
+
 SOUNDS = {
     ev.LURE_LAND: "plop",
     ev.NIBBLE: "nibble",
@@ -37,7 +39,7 @@ class PlayScene(Scene):
         self.round = R.Round(
             t, practice=practice, difficulty=app.settings.difficulty,
             forgiving_hook=app.settings.forgiving_hook,
-            seed=seed if seed is not None else app.args.seed,
+            seed=seed if seed is not None else app.args.seed, rod=app.source_name == "rod",
         )
         self.stepper = FixedStep(1.0 / t.loop.step_hz, t.loop.max_frame_s, t.loop.max_steps)
         self.inbox: list[MotionEvent] = []
@@ -167,6 +169,11 @@ class PlayScene(Scene):
             e = replace(e, detail={**e.detail, "send": result})
             if app.settings.game_bite_sound:
                 app.audio.play("bite")
+        elif e.kind == ev.ROUND_END:
+            try:
+                app.source.send(ROUND_END_MESSAGE)  # the Nano plays its end-of-round tune
+            except Exception:  # the buzzer must never crash the game
+                pass
         elif e.kind == ev.CAST and e.accepted:
             app.audio.play("cast")
         elif e.kind == ev.CATCH:

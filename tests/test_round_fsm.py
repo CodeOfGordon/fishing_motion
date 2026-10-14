@@ -34,15 +34,24 @@ def test_full_cast_is_clamped_to_the_water(d, tuning):
     assert p.water_top <= d.r.lure.y <= p.water_bottom
 
 
-def test_aim_uses_tilt_from_before_the_flick(d, tuning):
+def test_aim_stays_where_you_leave_it(d, tuning):
     d.clear_pond()
-    d.tilt = 0.5
+    d.tilt = 1.0
     d.wait_armed()
+    d.tilt = 0.0  # twist back to neutral
     d.step(20)
-    d.tilt = -1.0  # the flick itself rotates the rod
+    d.tilt = -1.0  # the flick itself rotates the rod, but only while armed ticks pass, not at the cast
     d.step(1, [d.ev("cast", 0.5)])
     cast = [e for e in d.kinds(ev.CAST) if e.accepted][0]
-    assert cast.detail["aim_deg"] == pytest.approx(0.5 * tuning.cast.aim_max_deg, abs=0.5)
+    assert d.r.aim > 0.3
+    assert cast.detail["aim_deg"] == pytest.approx(d.r.aim * tuning.cast.aim_max_deg, abs=3.0)
+
+
+def test_small_tilt_does_not_move_the_aim(d, tuning):
+    d.clear_pond()
+    d.tilt = tuning.cast.aim_deadzone * 0.9
+    d.step(60)
+    assert d.r.aim == 0.0
 
 
 def test_cast_too_soon_after_ready_is_ignored(d):

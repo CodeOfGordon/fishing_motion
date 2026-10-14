@@ -62,7 +62,7 @@ class Bot:
 
     def act(self, rnd: R.Round, host: float) -> tuple[float, float, list[MotionEvent]]:
         """Return (reel, tilt, events due now) for this step."""
-        reel, tilt = 0.0, self.aim_tilt
+        reel, tilt = 0.0, 0.0
         s = rnd.state
         if s == R.READY and not self.pending:
             in_ready = host - (rnd.state_since_ms + rnd.offset_ms)
@@ -71,7 +71,7 @@ class Bot:
                 if plan is None:
                     plan = (self.rng.uniform(-0.6, 0.6), self.rng.uniform(0.2, 1.0))
                 self.aim_tilt, strength = plan
-                tilt = self.aim_tilt
+                rnd.aim = self.aim_tilt
                 # hold the aim for a moment, then flick
                 self.pending.append(MotionEvent(CAST, host + 250, strength))
         elif s in (R.DRIFT, R.APPROACH):

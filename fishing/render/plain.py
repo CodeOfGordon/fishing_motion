@@ -7,7 +7,7 @@ import pygame
 
 from fishing.config import Tuning
 from fishing.input.motion import MotionState
-from fishing.render import hud, palette
+from fishing.render import hud, key_hints, palette
 from fishing.render.hud import ViewInfo
 from fishing.sim import events as ev
 from fishing.sim import round as R
@@ -67,7 +67,7 @@ class PlainView:
         rod_end = (tip[0] + st.tilt * 30, tip[1] - 60)
         pygame.draw.line(screen, palette.ROD, tip, rod_end, 5)
         if rnd.state == R.READY:
-            aim = math.radians(st.tilt * self.t.cast.aim_max_deg)
+            aim = math.radians(rnd.aim * self.t.cast.aim_max_deg)
             end = (tip[0] + math.sin(aim) * 160, tip[1] - math.cos(aim) * 160)
             pygame.draw.line(screen, palette.TEXT_DIM, rod_end, end, 2)
         elif rnd.state != R.OVER:
@@ -87,4 +87,5 @@ class PlainView:
         if rnd.card is not None:
             total = (self.t.round.catch_card_s if rnd.card.kind == "catch" else self.t.round.escape_card_s) * 1000
             hud.draw_card(screen, self.fonts, rnd, 1 - (rnd.card.until_ms - rnd.sim_ms) / total)
+        key_hints.draw_key_hints(screen, self.fonts, rnd, info)
         hud.draw_status(screen, self.fonts, rnd, info)

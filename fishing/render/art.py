@@ -17,7 +17,7 @@ import pygame
 
 from fishing.config import Tuning
 from fishing.input.motion import MotionState
-from fishing.render import hud
+from fishing.render import hud, key_hints
 from fishing.render import palette as P
 from fishing.render.art_hud import ArtHud
 from fishing.render.catch_card import Cards
@@ -179,6 +179,7 @@ class ArtView:
                 self.cards.draw_catch_card(screen, rnd, progress, t)
             else:
                 self.cards.draw_escape_card(screen, rnd, progress)
+        key_hints.draw_key_hints(screen, self.fonts, rnd, info)
         hud.draw_status(screen, self.fonts, rnd, info)
 
     def _draw_fish(self, screen: pygame.Surface, rnd: R.Round, t: float, dt: float, attract: bool) -> None:

@@ -31,7 +31,7 @@ max_ramp_dt_s = 0.1            # longest poll gap the tilt ramp uses, so a hitch
 
 [menu]
 tilt_nav = 0.6            # with the rod, tilt past this moves the menu selection...
-tilt_nav_repeat_s = 0.45  # ...once per this long while held; a hook-set selects
+tilt_nav_repeat_s = 1.5   # ...once per this long while held; a hook-set selects
 
 [rod_test]
 trials = 10               # prompts per part (casts, then hook-sets)
@@ -69,7 +69,8 @@ land_radius = 40          # a fought fish is landed inside this distance
 min_dist = 140
 dist_per_strength = 440   # distance = min_dist + dist_per_strength * strength
 aim_max_deg = 40          # tilt -1..1 aims the cast -40..40 degrees
-aim_lookback_ms = 150     # aim from tilt this long before the flick (the flick rotates the rod)
+aim_rate_per_s = 1.0      # tilting moves the aim (-1..1) this fast at full tilt, and it stays where you leave it
+aim_deadzone = 0.25       # tilt below this doesn't move the aim
 flight_base_s = 0.5
 flight_per_strength_s = 0.5
 arm_delay_s = 0.5         # READY must last this long before a cast is accepted...
@@ -123,6 +124,8 @@ grace_ms = 150               # added to every bite window for detection latency
 delivery_margin_ms = 120     # wait this long past the window for late-delivered gestures (judged by their stamp)
 perfect_ms = 250             # reaction at or under this is a perfect hook
 ack_match_ms = 500           # a bite_ack within this of a bite counts for that bite
+window_mult = 1.0            # every species' bite window x this (on top of the difficulty's); >1.0 lifts koi scores past the balance test
+rod_window_mult = 1.6        # ...and x this more with the rod: a real flick is slower than a key press
 
 [fight]
 reel_speed = 90           # px/s at reel_rate 1 while fighting

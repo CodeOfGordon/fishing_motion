@@ -15,6 +15,8 @@ from fishing.ui.widgets import ActionRow, Menu, TextRow
 if TYPE_CHECKING:
     from fishing.app import App
 
+STOP_TUNE_MESSAGE = "STOP"  # serial contract: sent when the player leaves the results screen (see ROD_HOOKUP.md)
+
 
 class ResultsScene(Scene):
     def __init__(self, app: "App", rnd: Round) -> None:
@@ -36,6 +38,12 @@ class ResultsScene(Scene):
         self.menu = Menu(rows, on_move=lambda: app.audio.play("menu_move"),
                          on_select=lambda: app.audio.play("menu_ok"))
         app.music("results", loop=False)
+
+    def on_exit(self) -> None:
+        try:
+            self.app.source.send(STOP_TUNE_MESSAGE)  # the Nano keeps playing its tune until told to stop
+        except Exception:  # the buzzer must never crash the game
+            pass
 
     def _set_name(self, name: str) -> None:
         self.name = name

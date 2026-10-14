@@ -90,8 +90,30 @@ def test_practice_debug_bite_sends_bite_once(app):
     assert len(bites) == 1 and '"send": "ok"' in bites[0]["detail"]
 
 
-def test_rod_choice_with_stub_falls_back_to_keyboard(app):
+def test_round_end_sends_end_once(app):
+    scene = PlayScene(app, practice=True)
+    app.scene = scene
+    sent = []
+    app.source.on_send = sent.append
+    scene.round.out = []
+    scene.round._set_state("OVER")
+    for e in scene.round.out:
+        scene._route(e)
+    assert sent == ["END"]
+
+
+def test_leaving_the_results_screen_sends_stop(app):
+    scene = PlayScene(app, practice=True)
+    results = ResultsScene(app, scene.round)
+    sent = []
+    app.source.on_send = sent.append
+    results.on_exit()
+    assert sent == ["STOP"]
+
+
+def test_rod_choice_with_missing_port_falls_back_to_keyboard(app):
     app.settings.input_source = "rod"
+    app.settings.serial_port = "/dev/cu.does-not-exist"
     app.switch_source()
     assert app.source_name == "keyboard"
     assert "Rod source not available" in app.source_error

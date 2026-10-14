@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import pygame
 
 from fishing.input.motion import MotionEvent, MotionState, now_ms
-from fishing.render import hud, palette
+from fishing.render import hud, motion_icons, palette
 from fishing.render.hud import ViewInfo
 from fishing.scenes.base import Scene
 from fishing.sim import round as R
@@ -94,3 +94,13 @@ class TitleScene(Scene):
         menu_top = info_y + 64
         hud.panel(screen, pygame.Rect(w // 2 - 200, menu_top, 400, 300))
         self.menu.draw(screen, app.fonts, w // 2, menu_top + 16)
+        if app.source_name == "rod":
+            x = w // 2 + 200 + palette.TITLE_HOLD_GAP
+            motion_icons.draw_icon(screen, motion_icons.HOLD, x, menu_top + palette.MOTION_ICON_SIZE // 2, True, now_ms())
+            text_y = menu_top + palette.MOTION_ICON_SIZE + 8
+            hud.text(screen, small, "Hold the rod upright,", (x, text_y), palette.TEXT)
+            hud.text(screen, small, "leaning toward the screen", (x, text_y + 22), palette.TEXT)
+            reel_y = text_y + 56
+            motion_icons.draw_icon(screen, motion_icons.CIRCLE, x, reel_y + palette.MOTION_ICON_SIZE // 2, True, now_ms())
+            hud.text(screen, small, "To reel: keep it upright and", (x, reel_y + palette.MOTION_ICON_SIZE + 8), palette.TEXT)
+            hud.text(screen, small, "draw circles with the tip", (x, reel_y + palette.MOTION_ICON_SIZE + 30), palette.TEXT)

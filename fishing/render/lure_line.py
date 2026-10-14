@@ -208,7 +208,7 @@ class Tackle:
              charging: float | None) -> None:
         s = rnd.state
         if s == R.READY:
-            self._draw_aim(screen, st.tilt, charging)
+            self._draw_aim(screen, rnd.aim, charging)
         b = self.bobber
         if s == R.CASTING:  # the lure's shadow on the water
             col = mix(P.CAST_SHADOW, self.pond.colour_at(b.x, b.y), 0.35)

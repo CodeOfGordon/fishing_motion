@@ -108,6 +108,7 @@ class Round:
         difficulty: str = "normal",
         forgiving_hook: bool = True,
         seed: int | None = None,
+        rod: bool = False,
     ) -> None:
         self.t = tuning
         self.seed = seed if seed is not None else random.randrange(2**31)
@@ -116,6 +117,7 @@ class Round:
         self.diff = tuning.difficulty.get(difficulty, tuning.difficulty["normal"])
         self.difficulty = difficulty if difficulty in tuning.difficulty else "normal"
         self.forgiving_hook = forgiving_hook
+        self.rod = rod
         self.length_s = tuning.round.length_s
 
         self.sim_ms = 0.0
@@ -126,6 +128,7 @@ class Round:
         self.inputs: deque[tuple[float, float, float]] = deque()  # (sim_ms, reel, tilt)
         self.reel = 0.0
         self.tilt = 0.0
+        self.aim = 0.0
 
         self.time_left_s: float | None = None if practice else self.length_s
         self.overtime_s = 0.0
@@ -274,6 +277,9 @@ class Round:
             self._rotate_bonus()
         self.reel, self.tilt = st.reel_rate, st.tilt
         self.inputs.append((self.sim_ms, self.reel, self.tilt))
+        if self.state == READY and abs(self.tilt) > self.t.cast.aim_deadzone:
+            push = math.copysign(abs(self.tilt) - self.t.cast.aim_deadzone, self.tilt)
+            self.aim = max(-1.0, min(1.0, self.aim + push * self.t.cast.aim_rate_per_s * dt))
         while self.inputs and self.sim_ms - self.inputs[0][0] > self.t.input.history_ms:
             self.inputs.popleft()
 
@@ -377,8 +383,7 @@ class Round:
     def _start_cast(self, e: MotionEvent, te: float) -> None:
         c = self.t.cast
         strength = max(0.0, min(1.0, e.strength))
-        _, tilt_then = self._input_at(te - c.aim_lookback_ms)
-        aim = math.radians(tilt_then * c.aim_max_deg)
+        aim = math.radians(self.aim * c.aim_max_deg)
         dist = c.min_dist + c.dist_per_strength * strength
         tip = self.t.pond.rod_tip
         tx, ty = self._clamp_ray(tip, aim, dist)
@@ -497,7 +502,9 @@ class Round:
         self.stats.bites += 1
         self.bite_start_ms = self.sim_ms
         self.bite_sent_host_ms = self.sim_ms + self.offset_ms  # refined by mark_bite_sent()
-        self.bite_window_ms = fish.spec.window_ms * self.diff.window_mult
+        h = self.t.hook
+        self.bite_window_ms = fish.spec.window_ms * self.diff.window_mult * h.window_mult * (
+            h.rod_window_mult if self.rod else 1.0)
         fish.mode = ATTACHED
         self._emit(ev.BITE, bite_id=self.bite_id, species=fish.spec.id, value=self.bite_window_ms,
                    detail={"kind": fish.spec.kind})
